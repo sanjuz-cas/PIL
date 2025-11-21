@@ -1,5 +1,6 @@
 import numpy as np
 import time
+import random
 from sentence_transformers import SentenceTransformer
 from jinja2 import Template
 from app.core.config import settings
@@ -8,9 +9,7 @@ from app.core.tools import BrowserTool
 
 
 class PILVAEDecoder:
-    """
-    The 'Writing' Brain: Gradient-Free Generator.
-    """
+    """The 'Writing' Brain: Gradient-Free Generator."""
 
     def __init__(self, latent_dim):
         self.latent_dim = latent_dim
@@ -19,7 +18,15 @@ class PILVAEDecoder:
         self.std = None
 
     def train_analytical(self, X_embeddings):
-        """One-shot learning via Linear Algebra"""
+        # Check if we have enough data to train
+        if len(X_embeddings) < 2:
+            # Not enough data for covariance, use identity init
+            self.weights["encoder"] = np.eye(X_embeddings.shape[1], self.latent_dim)
+            self.weights["decoder"] = np.eye(self.latent_dim, X_embeddings.shape[1])
+            self.mean = np.zeros(X_embeddings.shape[1])
+            self.std = np.ones(X_embeddings.shape[1])
+            return
+
         # 1. Normalize
         self.mean = np.mean(X_embeddings, axis=0)
         self.std = np.std(X_embeddings, axis=0) + 1e-6
@@ -35,7 +42,6 @@ class PILVAEDecoder:
         # 3. Decoder (Pseudoinverse / Ridge Regression)
         Z = X @ W_enc
         lambda_reg = 0.1
-        # W_dec = (Z^T Z + λI)^-1 Z^T X
         Z_prime = np.linalg.inv(Z.T @ Z + lambda_reg * np.eye(self.latent_dim)) @ Z.T
         W_dec = Z_prime @ X
         self.weights["decoder"] = W_dec
@@ -47,19 +53,17 @@ class IndxAI_OS:
     def __init__(self):
         print("🚀 Booting indxai Hybrid Engine...")
 
-        # Components
         self.memory = MemoryLayer(embedding_dim=settings.EMBEDDING_DIM)
         self.browser = BrowserTool()
         self.pil_vae = PILVAEDecoder(latent_dim=settings.LATENT_DIM)
 
-        # Load Transformer (The 'Reading' Brain)
         try:
             self.transformer = SentenceTransformer(settings.TRANSFORMER_MODEL)
         except Exception as e:
             print(f"⚠️ Model load failed: {e}")
             self.transformer = None
 
-        self.mode = "assistant"  # or "wearable"
+        self.mode = "assistant"
         self._seed_knowledge()
 
     def encode(self, text):
@@ -68,7 +72,10 @@ class IndxAI_OS:
         return np.random.randn(settings.EMBEDDING_DIM)
 
     def _seed_knowledge(self):
-        """Simulate fast on-device learning"""
+        """
+        Seed with Startup Info AND General Fallbacks.
+        This prevents 'Empty Brain' syndrome.
+        """
         facts = [
             "indxai is a startup building gradient-free generative AI.",
             "PIL-VAE is 17x faster than GANs and 900x faster than Diffusion.",
@@ -82,7 +89,6 @@ class IndxAI_OS:
             vectors.append(vec)
             self.memory.add(f, vec, {"type": "core_knowledge"})
 
-        # Train the Generator instantly
         if len(vectors) > 0:
             self.pil_vae.train_analytical(np.array(vectors))
 
@@ -94,34 +100,63 @@ class IndxAI_OS:
 
         # 2. Retrieval (RAG)
         docs = self.memory.retrieve(query_vec)
-        context = (
-            " ".join([d["text"] for d in docs]) if docs else "No internal context."
-        )
 
-        # 3. Browser Check
+        # CHECK: Is the retrieved memory actually relevant?
+        # In a real system we check cosine score. Here we'll trust the browser more.
+        internal_context = " ".join([d["text"] for d in docs]) if docs else ""
+
+        # 3. Browser Check (Aggressive)
+        # Always try browser if the query looks like a question about the world
         live_data = ""
-        if any(
-            k in user_input.lower()
-            for k in ["price", "news", "latest", "weather", "who is"]
-        ):
-            live_data = self.browser.search(user_input)
+        triggers = [
+            "who",
+            "what",
+            "where",
+            "when",
+            "price",
+            "news",
+            "current",
+            "president",
+            "weather",
+        ]
 
-        # 4. Generation (Template + Hybrid Logic)
-        # In full production, PIL-VAE generates tokens. Here it validates context relevance.
+        if any(k in user_input.lower() for k in triggers):
+            try:
+                live_data = self.browser.search(user_input)
+            except:
+                live_data = "Web search failed (Cloud IP Blocked)."
 
-        if self.mode == "wearable":
-            response = f"{{ 'data': '{live_data or context}', 'latency': 'low' }}"
+        # 4. Logic Routing
+        # If we found live data, use THAT. Ignore internal memory about "edge devices".
+        final_context = ""
+
+        if live_data and "No relevant" not in live_data:
+            final_context = f"Live Web Data: {live_data}"
         else:
-            # Adaptive Template
+            # Fallback to internal memory only if it seems relevant
+            # (Simple heuristic: if query contains 'indxai' or 'pil', use memory)
+            if (
+                "indxai" in user_input.lower()
+                or "pil" in user_input.lower()
+                or "fast" in user_input.lower()
+            ):
+                final_context = f"Internal Database: {internal_context}"
+            else:
+                # If we know nothing and browser failed
+                final_context = "I am a specialized Edge AI trained on indxai technology. I don't have general world knowledge installed in this demo version."
+
+        # 5. Generation Template
+        if self.mode == "wearable":
+            response = f"{{ 'answer': '{final_context[:100]}...', 'latency': 'low' }}"
+        else:
             tmpl_str = """
-            Analysis: {{context}}
-            {% if live_data %}Live Web: {{live_data}}{% endif %}
-            Response: Based on my training, {{context}} {{live_data}}
+            [Analysis]: Processing query...
+            [Context]: {{final_context}}
+            [Response]: {{final_context}}
             """
             t = Template(tmpl_str)
-            response = t.render(context=context, live_data=live_data)
+            response = t.render(final_context=final_context)
 
-        # Clean up
         response = response.replace("\n", " ").strip()
 
         # Log
