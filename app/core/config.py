@@ -1,5 +1,8 @@
 import os
 from dataclasses import dataclass
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 @dataclass
@@ -14,10 +17,10 @@ class Settings:
 
     # --- GOOGLE SEARCH CREDENTIALS ---
     # 1. The ID you just gave me:
-    GOOGLE_CSE_ID: str = "502b9f5b609884bf9"
+    GOOGLE_CSE_ID: str = os.getenv("GOOGLE_CSE_ID", "")
 
     # 2. The Key you get from Cloud Console (starts with AIza...):
-    GOOGLE_API_KEY: str = "AQ.Ab8RN6LyTO7Rta5ob5SyunfSGmaQfJHfhGLS5ZFxSJENFLrWRg"
+    GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY", "")
 
 
 settings = Settings()
