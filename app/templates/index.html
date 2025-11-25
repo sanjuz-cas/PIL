@@ -17,9 +17,19 @@
 <body class="h-screen flex flex-col p-4 md:p-8 max-w-5xl mx-auto">
 
     <header class="flex justify-between items-center mb-6">
-        <div>
-            <h1 class="text-2xl font-bold tracking-tighter text-white">indxai<span class="text-xs align-top ml-1 text-gray-500">PLATFORM</span></h1>
-            <p class="text-xs text-gray-500">PIL-VAE HYBRID ENGINE v1.0</p>
+        <div class="flex items-center gap-6">
+            <div class="flex gap-2">
+                <button id="btn-sidebar" class="p-2 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="Toggle Sidebar">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><path d="M9 3v18"/></svg>
+                </button>
+                <button id="btn-new-chat" class="p-2 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="New Chat">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                </button>
+            </div>
+            <div>
+                <h1 class="text-2xl font-bold tracking-tighter text-white">indxai<span class="text-xs align-top ml-1 text-gray-500">PLATFORM</span></h1>
+                <p class="text-xs text-gray-500">PIL-VAE HYBRID ENGINE v1.0</p>
+            </div>
         </div>
         <div class="flex gap-4 text-xs">
             <div class="flex items-center"><span class="w-2 h-2 rounded-full bg-green-500 mr-2"></span>ONLINE</div>
@@ -48,7 +58,7 @@
                 <input type="text" id="query-input" name="query" 
                        class="flex-1 bg-transparent border-none focus:ring-0 text-white placeholder-gray-600" 
                        placeholder="Ask about the tech, or search live web..." autocomplete="off" autofocus>
-                <select name="mode" id="mode-select" class="bg-black text-xs border border-gray-700 rounded px-2 text-gray-400 focus:outline-none">
+                <select name="mode" id="mode-select" title="Select Mode" class="bg-black text-xs border border-gray-700 rounded px-2 text-gray-400 focus:outline-none">
                     <option value="assistant">Assistant</option>
                     <option value="wearable">Wearable (JSON)</option>
                 </select>
@@ -147,6 +157,73 @@
                                 log.scrollTop = log.scrollHeight;
                             } else if (data.type === 'stats') {
                                 latencyDisp.innerText = data.latency;
+                            } else if (data.type === 'meta') {
+                                // Update Latency
+                                if (data.stats && data.stats.latency) {
+                                    latencyDisp.innerText = data.stats.latency;
+                                }
+
+                                // Render Sources
+                                if (data.sources && data.sources.length > 0) {
+                                    const sourcesDiv = document.createElement('div');
+                                    sourcesDiv.className = "mt-4 p-3 bg-white/5 rounded border border-white/10 text-xs";
+                                    sourcesDiv.innerHTML = `<div class="text-gray-500 font-bold mb-2">SOURCES</div>`;
+                                    
+                                    const list = document.createElement('ul');
+                                    list.className = "space-y-1";
+                                    
+                                    data.sources.forEach(src => {
+                                        const li = document.createElement('li');
+                                        li.innerHTML = `<a href="${src.url}" target="_blank" class="text-blue-400 hover:underline truncate block" title="${src.snippet}">[${src.title}]</a>`;
+                                        list.appendChild(li);
+                                    });
+                                    sourcesDiv.appendChild(list);
+                                    log.lastElementChild.appendChild(sourcesDiv);
+                                }
+
+                                // Render Actions
+                                if (data.actions && data.actions.length > 0) {
+                                    const actionsDiv = document.createElement('div');
+                                    actionsDiv.className = "mt-2 flex gap-2";
+                                    
+                                    // Copy Button
+                                    if (data.actions.includes('copy')) {
+                                        const copyBtn = document.createElement('button');
+                                        copyBtn.className = "text-xs bg-white/10 hover:bg-white/20 px-2 py-1 rounded text-gray-300";
+                                        copyBtn.innerText = "Copy";
+                                        copyBtn.onclick = () => {
+                                            navigator.clipboard.writeText(aiTextSpan.innerText);
+                                            copyBtn.innerText = "Copied!";
+                                            setTimeout(() => copyBtn.innerText = "Copy", 2000);
+                                        };
+                                        actionsDiv.appendChild(copyBtn);
+                                    }
+
+                                    // Thumbs Up
+                                    if (data.actions.includes('thumbs_up')) {
+                                        const upBtn = document.createElement('button');
+                                        upBtn.className = "text-xs bg-white/10 hover:bg-white/20 px-2 py-1 rounded text-gray-300";
+                                        upBtn.innerText = "👍";
+                                        upBtn.onclick = () => {
+                                            upBtn.classList.add('text-green-400');
+                                        };
+                                        actionsDiv.appendChild(upBtn);
+                                    }
+
+                                    // Thumbs Down
+                                    if (data.actions.includes('thumbs_down')) {
+                                        const downBtn = document.createElement('button');
+                                        downBtn.className = "text-xs bg-white/10 hover:bg-white/20 px-2 py-1 rounded text-gray-300";
+                                        downBtn.innerText = "👎";
+                                        downBtn.onclick = () => {
+                                            downBtn.classList.add('text-red-400');
+                                        };
+                                        actionsDiv.appendChild(downBtn);
+                                    }
+
+                                    log.lastElementChild.appendChild(actionsDiv);
+                                }
+                                log.scrollTop = log.scrollHeight;
                             }
                         } catch (e) {
                             console.error("Error parsing JSON chunk", e);
@@ -159,6 +236,34 @@
                 if (indicator) indicator.remove();
                 log.innerHTML += `<div class="text-red-500">[ERROR]: Connection lost.</div>`;
             }
+        });
+
+        // Sidebar Toggle
+        const btnSidebar = document.getElementById('btn-sidebar');
+        const sidebar = document.querySelector('aside');
+        btnSidebar.addEventListener('click', () => {
+            const isHidden = sidebar.classList.contains('hidden') && window.getComputedStyle(sidebar).display === 'none';
+            // If hidden (mobile default) or manually hidden
+            if (isHidden || sidebar.classList.contains('hidden')) {
+                // Show it
+                sidebar.classList.remove('hidden');
+                sidebar.classList.add('md:block');
+            } else {
+                // Hide it
+                sidebar.classList.add('hidden');
+                sidebar.classList.remove('md:block');
+            }
+        });
+
+        // New Chat
+        const btnNewChat = document.getElementById('btn-new-chat');
+        btnNewChat.addEventListener('click', () => {
+            log.innerHTML = `
+                <div class="mb-2">
+                    <span class="text-blue-400 font-bold">[SYSTEM]:</span>
+                    <span class="text-gray-300">Kernel loaded. Memory hydrated with core tensors. Ready for queries.</span>
+                </div>
+            `;
         });
     </script>
 </body>

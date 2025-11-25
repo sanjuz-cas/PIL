@@ -101,7 +101,7 @@ class IndxAI_OS:
             except Exception as e2:
                 logger.error(f"All search backends failed: {e2}")
 
-        return [r["body"] for r in results if "body" in r]
+        return results
 
     def update_memory(self, new_texts, source="web"):
         """Embeds new texts and updates the VAE."""
@@ -210,6 +210,7 @@ class IndxAI_OS:
         # 1. Intent Routing & Context Retrieval
         context_data = []
         source_label = "LIVE WEB"
+        sources_metadata = []
 
         # Simple keyword detection for Gmail intent
         if (
@@ -219,10 +220,33 @@ class IndxAI_OS:
         ):
             source_label = "GMAIL"
             clean_q = self._extract_keywords(query)
-            context_data = self.gmail.get_relevant_emails(clean_q)
+            # GmailTool returns strings
+            raw_results = self.gmail.get_relevant_emails(clean_q)
+            context_data = raw_results
+
+            # Create metadata for Gmail
+            for i, txt in enumerate(raw_results):
+                sources_metadata.append(
+                    {
+                        "title": f"Email Result {i + 1}",
+                        "url": "https://mail.google.com",
+                        "snippet": txt[:100] + "...",
+                    }
+                )
         else:
             # Default to Web Search
-            context_data = self.search_web(query)
+            # Returns list of dicts: {'title':..., 'href':..., 'body':...}
+            raw_results = self.search_web(query)
+            context_data = [r.get("body", "") for r in raw_results if "body" in r]
+
+            for r in raw_results:
+                sources_metadata.append(
+                    {
+                        "title": r.get("title", "Web Result"),
+                        "url": r.get("href", "#"),
+                        "snippet": r.get("body", "")[:100] + "...",
+                    }
+                )
 
         # 2. Update Memory & Train VAE
         if context_data:
@@ -238,6 +262,18 @@ class IndxAI_OS:
                 )
                 + "\n"
             )
+            # Send empty meta to close gracefully
+            yield (
+                json.dumps(
+                    {
+                        "type": "meta",
+                        "stats": {"latency": "0ms"},
+                        "sources": [],
+                        "actions": [],
+                    }
+                )
+                + "\n"
+            )
             return
 
         # 3. Embed Query
@@ -249,7 +285,10 @@ class IndxAI_OS:
         )
 
         # 5. Conversational Formatting & Streaming
-        final_output = f"Hey, checking {source_label} for you...\n\n{reasoned_text}\n\nHope that helps!"
+        final_output = (
+            f"Hey, checking {source_label} for you...\n\n"
+            f"{reasoned_text}\n\nHope that helps!"
+        )
 
         # Stream character by character
         chunk_size = 3
@@ -258,6 +297,16 @@ class IndxAI_OS:
             yield json.dumps({"type": "token", "content": chunk}) + "\n"
             time.sleep(0.03)
 
-        # Final stats
+        # Final stats & Metadata
         latency = (time.time() - start) * 1000
-        yield json.dumps({"type": "stats", "latency": f"{latency:.2f}ms"}) + "\n"
+        yield (
+            json.dumps(
+                {
+                    "type": "meta",
+                    "stats": {"latency": f"{latency:.2f}ms"},
+                    "sources": sources_metadata,
+                    "actions": ["copy", "thumbs_up", "thumbs_down"],
+                }
+            )
+            + "\n"
+        )
