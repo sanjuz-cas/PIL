@@ -33,13 +33,15 @@
         </div>
         <div class="flex gap-4 text-xs">
             <div class="flex items-center"><span class="w-2 h-2 rounded-full bg-green-500 mr-2"></span>ONLINE</div>
-            <div class="flex items-center"><span class="w-2 h-2 rounded-full bg-blue-500 mr-2"></span>EDGE MODE</div>
+            <button id="btn-edge-mode" class="flex items-center hover:text-white transition-colors text-gray-400">
+                <span class="w-2 h-2 rounded-full bg-blue-500 mr-2"></span>EDGE MODE
+            </button>
         </div>
     </header>
 
     <main class="flex-1 flex flex-col md:flex-row gap-4 overflow-hidden">
         
-        <section class="flex-1 glass rounded-lg p-4 flex flex-col">
+        <section class="flex-1 min-w-0 glass rounded-lg p-4 flex flex-col">
             <div id="chat-log" class="flex-1 overflow-y-auto space-y-4 mb-4 pr-2">
                 <div class="mb-2">
                     <span class="text-blue-400 font-bold">[SYSTEM]:</span>
@@ -66,7 +68,7 @@
             </form>
         </section>
 
-        <aside class="hidden md:block w-64 glass rounded-lg p-4 text-xs">
+        <aside class="hidden md:block w-64 shrink-0 glass rounded-lg p-4 text-xs">
             <h3 class="text-gray-500 font-bold mb-4 border-b border-gray-700 pb-2">ENGINE TELEMETRY</h3>
             
             <div class="space-y-4">
@@ -91,6 +93,34 @@
             </div>
         </aside>
     </main>
+
+    <div id="tech-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center z-50 p-4">
+        <div class="bg-gray-900 border border-gray-700 rounded-lg max-w-2xl w-full p-6 shadow-2xl relative">
+            <button id="close-modal" class="absolute top-4 right-4 text-gray-400 hover:text-white" title="Close Modal">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            <h2 class="text-xl font-bold text-white mb-4">Technical Architecture: Edge Mode</h2>
+            <div class="space-y-4 text-sm text-gray-300 font-mono h-96 overflow-y-auto pr-2">
+                <p class="text-green-400 font-bold">"We use Cython to transpile our proprietary math kernels into C++, and then compile that to WebAssembly."</p>
+                
+                <h3 class="text-white font-bold mt-4">1. The Concept: AOT Compilation</h3>
+                <p>Standard Python is interpreted (slow). We translate logic to C++ (fast) and then to WASM (browser-native).</p>
+                
+                <h3 class="text-white font-bold mt-4">2. The Pipeline</h3>
+                <ul class="list-disc pl-5 space-y-2">
+                    <li><span class="text-blue-400">Path A (Logic):</span> Python -> Cython -> C++ -> Emscripten -> <strong>.wasm</strong></li>
+                    <li><span class="text-blue-400">Path B (Model):</span> PyTorch -> ONNX -> <strong>ONNX Runtime Web</strong></li>
+                </ul>
+
+                <h3 class="text-white font-bold mt-4">3. Business Value</h3>
+                <ul class="list-disc pl-5 space-y-2">
+                    <li><strong>Zero Server Cost:</strong> Compute happens on client device.</li>
+                    <li><strong>Total Privacy:</strong> Data never leaves the browser.</li>
+                    <li><strong>Offline Capable:</strong> Works without internet.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
 
     <script>
         const form = document.getElementById('chat-form');
@@ -264,6 +294,25 @@
                     <span class="text-gray-300">Kernel loaded. Memory hydrated with core tensors. Ready for queries.</span>
                 </div>
             `;
+        });
+
+        // Modal Logic
+        const modal = document.getElementById('tech-modal');
+        const btnEdgeMode = document.getElementById('btn-edge-mode');
+        const btnCloseModal = document.getElementById('close-modal');
+
+        btnEdgeMode.addEventListener('click', () => {
+            modal.classList.remove('hidden');
+        });
+
+        btnCloseModal.addEventListener('click', () => {
+            modal.classList.add('hidden');
+        });
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.classList.add('hidden');
+            }
         });
     </script>
 </body>
