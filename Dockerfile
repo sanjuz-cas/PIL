@@ -19,7 +19,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Expose Render's default port
-EXPOSE 10000
+# Expose the standard port
+EXPOSE 8080
 
-# Run command: Explicitly bind to port 10000
-CMD ["gunicorn", "app.main:app", "--workers", "1", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:10000", "--timeout", "120"]
+# Bind to 8080
+CMD ["gunicorn", "app.main:app", "--workers", "1", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8080", "--timeout", "120"]
