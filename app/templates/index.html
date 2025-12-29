@@ -62,7 +62,19 @@
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(201, 53, 86, 0.4); }
         
         .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .no-scrollbar { -ms-overflow-style: none; overflow: -moz-scrollbars-none; }
+        @supports (scrollbar-width: none) {
+            .no-scrollbar { scrollbar-width: none; }
+        }
+        
+        /* Custom utility classes to replace inline styles */
+        .main-content-margin { margin-left: 288px; }
+        .sidebar-toggle-left { left: 0; }
+        .animate-delay-100 { animation-delay: 0.1s; }
+        .min-h-textarea { min-height: 56px; }
+        .ping-slow { animation-duration: 3s; }
+        .ping-medium { animation-duration: 2s; }
+        .overlay-transition { transition: opacity 0.3s; }
         
         /* Markdown styling */
         .markdown-content p { margin-bottom: 0.75rem; }
@@ -103,7 +115,7 @@
             <div class="flex items-center gap-2">
                 <span class="font-serif font-bold text-lg tracking-tight text-cherry-900">Indxai</span>
             </div>
-            <button id="btn-mobile-sidebar" class="text-cherry-900 p-1">
+            <button id="btn-mobile-sidebar" class="text-cherry-900 p-1" title="Toggle sidebar" aria-label="Toggle sidebar">
                 <svg id="menu-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
                 <svg id="close-icon" class="hidden" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
@@ -136,7 +148,7 @@
                     </button>
                     
                     <!-- Mode Select -->
-                    <select id="mode-select" class="w-full bg-cherry-800/50 text-cherry-100 text-sm border border-cherry-700 rounded-lg px-3 py-2 focus:outline-none focus:border-cherry-500 cursor-pointer">
+                    <select id="mode-select" class="w-full bg-cherry-800/50 text-cherry-100 text-sm border border-cherry-700 rounded-lg px-3 py-2 focus:outline-none focus:border-cherry-500 cursor-pointer" title="Select mode" aria-label="Select mode">
                         <option value="assistant" class="bg-cherry-900"> Assistant</option>
                         <option value="wearable" class="bg-cherry-900"> Wearable</option>
                     </select>
@@ -151,17 +163,17 @@
         </div>
 
         <!-- Main Chat Area -->
-        <div id="main-content" class="flex-1 flex flex-col h-full relative z-0 transition-all duration-300 bg-beige-100 overflow-hidden pt-14 lg:pt-0" style="margin-left: 288px;">
+        <div id="main-content" class="flex-1 flex flex-col h-full relative z-0 transition-all duration-300 bg-beige-100 overflow-hidden pt-14 lg:pt-0 main-content-margin">
             
             <!-- Sidebar Toggle (Desktop) -->
-            <button id="btn-sidebar-toggle" class="hidden lg:flex absolute top-1/2 -translate-y-1/2 z-50 w-5 h-12 items-center justify-center bg-white/80 backdrop-blur-sm border-y border-r border-beige-200 rounded-r-md shadow-sm text-cherry-900 hover:text-cherry-600 hover:bg-white hover:w-7 transition-all duration-200 opacity-70 hover:opacity-100" style="left: 0;">
+            <button id="btn-sidebar-toggle" class="hidden lg:flex absolute top-1/2 -translate-y-1/2 z-50 w-5 h-12 items-center justify-center bg-white/80 backdrop-blur-sm border-y border-r border-beige-200 rounded-r-md shadow-sm text-cherry-900 hover:text-cherry-600 hover:bg-white hover:w-7 transition-all duration-200 opacity-70 hover:opacity-100 sidebar-toggle-left" title="Toggle sidebar" aria-label="Toggle sidebar">
                 <svg id="chevron-left" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
                 <svg id="chevron-right" class="hidden" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
             </button>
 
             <!-- Header (Desktop) -->
             <header class="hidden lg:flex absolute top-0 left-0 right-0 z-10 items-center justify-between px-8 py-6 bg-gradient-to-b from-beige-100 to-transparent pointer-events-none">
-                <div class="flex flex-col animate-fade-in-up pointer-events-auto" style="animation-delay: 0.1s;">
+                <div class="flex flex-col animate-fade-in-up pointer-events-auto animate-delay-100">
                     <h1 class="font-serif font-bold text-2xl tracking-tight text-cherry-900 leading-none">Indxai</h1>
                     <span class="text-[10px] uppercase tracking-[0.2em] text-cherry-900/60 font-medium mt-1">PIL-VAE Engine</span>
                 </div>
@@ -176,12 +188,8 @@
                 <div id="chat-log" class="max-w-3xl mx-auto space-y-6">
                     <!-- Welcome Screen -->
                     <div id="welcome-screen" class="flex flex-col items-center justify-center h-[50vh] text-center space-y-4 animate-fade-in-up">
-                        <div class="w-16 h-1 bg-cherry-600"></div>
                         <div>
-                            <h2 class="font-serif text-4xl font-semibold text-gray-900 tracking-tight mb-3">Indxai</h2>
-                            <p class="text-gray-500 text-base max-w-sm mx-auto leading-relaxed font-light">
-                                What can I create for you today?
-                            </p>
+                            <h2 class="font-serif text-4xl font-semibold text-gray-900 tracking-tight mb-3">What can i create for you today?</h2>
                         </div>
                     </div>
                     
@@ -205,7 +213,7 @@
                                 </button>
                             </div>
 
-                            <textarea id="query-input" name="query" placeholder="Type your request..." rows="1" class="w-full max-h-[150px] py-4 pl-14 pr-28 bg-transparent border-0 focus:ring-0 focus:outline-none resize-none text-[16px] leading-6 text-gray-800 placeholder:text-gray-400/70 no-scrollbar font-light" style="min-height: 56px;" autocomplete="off"></textarea>
+                            <textarea id="query-input" name="query" placeholder="Type your request..." rows="1" class="w-full max-h-[150px] py-4 pl-14 pr-28 bg-transparent border-0 focus:ring-0 focus:outline-none resize-none text-[16px] leading-6 text-gray-800 placeholder:text-gray-400/70 no-scrollbar font-light min-h-textarea" autocomplete="off"></textarea>
                             
                             <div class="absolute right-2 bottom-2 flex items-center gap-2">
                                 <!-- Live Mode Button -->
@@ -214,7 +222,7 @@
                                 </button>
 
                                 <!-- Send Button -->
-                                <button type="submit" id="btn-send" class="h-10 w-10 rounded-lg flex items-center justify-center transition-all duration-300 bg-beige-100 text-gray-400 cursor-not-allowed">
+                                <button type="submit" id="btn-send" class="h-10 w-10 rounded-lg flex items-center justify-center transition-all duration-300 bg-beige-100 text-gray-400 cursor-not-allowed" title="Send message" aria-label="Send message">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
                                 </button>
                             </div>
@@ -230,8 +238,8 @@
             <div class="relative flex flex-col items-center">
                 <!-- Visualizer -->
                 <div class="w-64 h-64 relative flex items-center justify-center mb-12">
-                    <div class="absolute inset-0 bg-cherry-500/20 rounded-full animate-ping" style="animation-duration: 3s;"></div>
-                    <div class="absolute inset-4 bg-cherry-500/30 rounded-full animate-ping" style="animation-duration: 2s;"></div>
+                    <div class="absolute inset-0 bg-cherry-500/20 rounded-full animate-ping ping-slow"></div>
+                    <div class="absolute inset-4 bg-cherry-500/30 rounded-full animate-ping ping-medium"></div>
                     <div class="relative w-32 h-32 bg-gradient-to-br from-cherry-600 to-cherry-800 rounded-full shadow-2xl shadow-cherry-900/50 flex items-center justify-center">
                         <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="animate-pulse"><path d="M2 10v3"></path><path d="M6 6v11"></path><path d="M10 3v18"></path><path d="M14 8v7"></path><path d="M18 5v13"></path><path d="M22 10v3"></path></svg>
                     </div>
@@ -240,14 +248,14 @@
                 <h2 class="font-serif text-3xl text-cherry-900 mb-2">Indxai Live</h2>
                 <p class="text-cherry-800/60 tracking-wide uppercase text-xs font-semibold">Listening...</p>
 
-                <button id="btn-stop-live" class="mt-16 w-16 h-16 rounded-full bg-white border border-beige-200 shadow-lg flex items-center justify-center text-cherry-600 hover:bg-cherry-50 hover:scale-105 transition-all duration-300 group">
+                <button id="btn-stop-live" class="mt-16 w-16 h-16 rounded-full bg-white border border-beige-200 shadow-lg flex items-center justify-center text-cherry-600 hover:bg-cherry-50 hover:scale-105 transition-all duration-300 group" title="Stop live session" aria-label="Stop live session">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover:text-cherry-700"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
                 </button>
             </div>
         </div>
 
         <!-- Mobile Sidebar Overlay -->
-        <div id="sidebar-overlay" class="fixed inset-0 bg-black/20 backdrop-blur-sm z-30 lg:hidden hidden" style="transition: opacity 0.3s;"></div>
+        <div id="sidebar-overlay" class="fixed inset-0 bg-black/20 backdrop-blur-sm z-30 lg:hidden hidden overlay-transition"></div>
 
     </div>
 
