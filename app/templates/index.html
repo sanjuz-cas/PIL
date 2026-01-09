@@ -138,6 +138,32 @@
                     <!-- Sessions will be populated here -->
                 </div>
 
+                <!-- Knowledge Stats -->
+                <div class="p-4 border-t border-cherry-800/50 bg-cherry-950/30 shrink-0 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-cherry-300 uppercase tracking-wider font-semibold">Knowledge Base</span>
+                        <button id="btn-refresh-stats" class="text-cherry-400 hover:text-white transition-colors" title="Refresh stats">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+                        </button>
+                    </div>
+                    <div id="knowledge-stats" class="grid grid-cols-2 gap-2 text-center">
+                        <div class="bg-cherry-800/30 rounded-lg px-2 py-2">
+                            <div id="stat-knowledge" class="text-lg font-bold text-white">--</div>
+                            <div class="text-[10px] text-cherry-400 uppercase">Entries</div>
+                        </div>
+                        <div class="bg-cherry-800/30 rounded-lg px-2 py-2">
+                            <div id="stat-trained" class="text-lg font-bold text-white">--</div>
+                            <div class="text-[10px] text-cherry-400 uppercase">User Trained</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Train Knowledge Button -->
+                    <button id="btn-train-knowledge" class="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-cherry-700 hover:bg-cherry-600 text-white text-sm font-medium transition-all">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/><path d="m9 9.5 2 2 4-4"/></svg>
+                        Train Knowledge
+                    </button>
+                </div>
+
                 <!-- Sidebar Footer with Controls -->
                 <div class="p-4 border-t border-cherry-800/50 bg-cherry-950/30 shrink-0 space-y-3">
                     <!-- TTS Toggle -->
@@ -251,6 +277,38 @@
                 <button id="btn-stop-live" class="mt-16 w-16 h-16 rounded-full bg-white border border-beige-200 shadow-lg flex items-center justify-center text-cherry-600 hover:bg-cherry-50 hover:scale-105 transition-all duration-300 group" title="Stop live session" aria-label="Stop live session">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="group-hover:text-cherry-700"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
                 </button>
+            </div>
+        </div>
+
+        <!-- Train Knowledge Modal -->
+        <div id="train-modal" class="fixed inset-0 z-[60] bg-black/30 backdrop-blur-sm flex items-center justify-center hidden">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden animate-fade-in-up">
+                <div class="bg-cherry-900 px-6 py-4 flex items-center justify-between">
+                    <h3 class="font-serif text-lg font-semibold text-white">Train Knowledge</h3>
+                    <button id="btn-close-train" class="text-cherry-300 hover:text-white transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
+                <form id="train-form" class="p-6 space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Knowledge Text</label>
+                        <textarea id="train-input" name="text_data" rows="8" placeholder="Paste or type the knowledge you want the AI to learn. This could be facts, documents, or any text content..." class="w-full px-4 py-3 border border-beige-200 rounded-lg focus:ring-2 focus:ring-cherry-500 focus:border-cherry-500 text-sm resize-none" required></textarea>
+                        <p class="text-xs text-gray-500 mt-1">Tip: Separate distinct pieces of information with periods.</p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button type="submit" id="btn-train-submit" class="flex-1 bg-cherry-600 hover:bg-cherry-700 text-white font-medium py-2.5 px-4 rounded-lg transition-colors flex items-center justify-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
+                            <span>Train Now</span>
+                        </button>
+                        <button type="button" id="btn-cancel-train" class="px-4 py-2.5 border border-beige-300 text-gray-600 rounded-lg hover:bg-beige-50 transition-colors">Cancel</button>
+                    </div>
+                    <div id="train-status" class="hidden">
+                        <div class="flex items-center gap-2 text-sm">
+                            <div id="train-spinner" class="w-4 h-4 border-2 border-cherry-600 border-t-transparent rounded-full animate-spin"></div>
+                            <span id="train-message" class="text-gray-600">Training in progress...</span>
+                        </div>
+                    </div>
+                </form>
             </div>
         </div>
 
@@ -802,6 +860,105 @@
         });
 
         // ============================================
+        // KNOWLEDGE STATS & TRAINING
+        // ============================================
+        const trainModal = document.getElementById('train-modal');
+        const trainForm = document.getElementById('train-form');
+        const trainInput = document.getElementById('train-input');
+        const trainStatus = document.getElementById('train-status');
+        const trainMessage = document.getElementById('train-message');
+        const trainSpinner = document.getElementById('train-spinner');
+        const statKnowledge = document.getElementById('stat-knowledge');
+        const statTrained = document.getElementById('stat-trained');
+
+        async function fetchKnowledgeStats() {
+            try {
+                const res = await fetch('/v1/training-status');
+                const data = await res.json();
+                statKnowledge.textContent = data.total_knowledge || '--';
+                statTrained.textContent = data.user_trained_count || '0';
+            } catch (err) {
+                console.error('Failed to fetch stats:', err);
+                statKnowledge.textContent = '--';
+                statTrained.textContent = '--';
+            }
+        }
+
+        // Open train modal
+        document.getElementById('btn-train-knowledge').addEventListener('click', () => {
+            trainModal.classList.remove('hidden');
+            trainInput.focus();
+        });
+
+        // Close train modal
+        function closeTrainModal() {
+            trainModal.classList.add('hidden');
+            trainInput.value = '';
+            trainStatus.classList.add('hidden');
+        }
+
+        document.getElementById('btn-close-train').addEventListener('click', closeTrainModal);
+        document.getElementById('btn-cancel-train').addEventListener('click', closeTrainModal);
+        
+        // Close modal on outside click
+        trainModal.addEventListener('click', (e) => {
+            if (e.target === trainModal) closeTrainModal();
+        });
+
+        // Submit training
+        trainForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const textData = trainInput.value.trim();
+            if (!textData) return;
+
+            // Show loading state
+            trainStatus.classList.remove('hidden');
+            trainSpinner.classList.remove('hidden');
+            trainMessage.textContent = 'Training in progress...';
+            trainMessage.classList.remove('text-green-600', 'text-red-600');
+            trainMessage.classList.add('text-gray-600');
+            document.getElementById('btn-train-submit').disabled = true;
+
+            try {
+                const formData = new FormData();
+                formData.append('text_data', textData);
+
+                const res = await fetch('/v1/train-knowledge', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await res.json();
+                
+                // Show success
+                trainSpinner.classList.add('hidden');
+                trainMessage.textContent = '✓ ' + (data.message || 'Training started successfully!');
+                trainMessage.classList.remove('text-gray-600');
+                trainMessage.classList.add('text-green-600');
+
+                // Refresh stats after a delay
+                setTimeout(() => {
+                    fetchKnowledgeStats();
+                    closeTrainModal();
+                }, 2000);
+
+            } catch (err) {
+                console.error('Training error:', err);
+                trainSpinner.classList.add('hidden');
+                trainMessage.textContent = '✗ Training failed. Please try again.';
+                trainMessage.classList.remove('text-gray-600');
+                trainMessage.classList.add('text-red-600');
+            } finally {
+                document.getElementById('btn-train-submit').disabled = false;
+            }
+        });
+
+        // Refresh stats button
+        document.getElementById('btn-refresh-stats').addEventListener('click', () => {
+            fetchKnowledgeStats();
+        });
+
+        // ============================================
         // SUGGESTION BUTTONS
         // ============================================
         document.querySelectorAll('.suggestion-btn').forEach(btn => {
@@ -816,6 +973,7 @@
         // INITIALIZATION
         // ============================================
         createNewChat();
+        fetchKnowledgeStats(); // Load knowledge stats on startup
         
         // Set initial sidebar state based on screen size
         if (window.innerWidth >= 1024) {

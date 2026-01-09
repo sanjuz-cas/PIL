@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Allow cleartext (HTTP) traffic to all domains for development -->
+    <!-- This allows connecting to your computer's local IP address -->
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

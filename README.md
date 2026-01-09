@@ -109,6 +109,17 @@ app/core/
 ├── attention_pil.py   # AttentionPILBlock, AttentionPILModel, PILTrainer
 └── pil_vae.py         # PIL-based VAE (original)
 
+wearos-app/           # 🆕 WearOS Watch Application
+├── app/src/main/java/com/indxai/watch/
+│   ├── presentation/  # Jetpack Compose UI
+│   ├── voice/         # Vosk STT + TTS
+│   └── data/          # API client + Room DB
+└── README.md          # WearOS quick start
+
+docs/
+├── PRD_WearOS_VoiceAgent.md       # Product Requirements Document
+└── WEAROS_SETUP_INSTRUCTIONS.md   # Android Studio setup guide
+
 examples/
 └── train_attention_pil.py  # Training demonstration
 

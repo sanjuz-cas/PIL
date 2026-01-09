@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Indxai</string>
+    <string name="app_description">PIL-VAE Voice Assistant</string>
+    
+    <!-- Home Screen -->
+    <string name="tap_to_speak">Tap to speak</string>
+    <string name="connected">Connected</string>
+    <string name="offline">Offline</string>
+    
+    <!-- Listening Screen -->
+    <string name="listening">Listening...</string>
+    <string name="initializing">Initializing...</string>
+    <string name="processing">Processing...</string>
+    <string name="cancel">Cancel</string>
+    
+    <!-- Response Screen -->
+    <string name="thinking">Thinking...</string>
+    <string name="new_query">New query</string>
+    <string name="speak_response">Speak response</string>
+    <string name="stop_speaking">Stop speaking</string>
+    
+    <!-- Settings Screen -->
+    <string name="settings">Settings</string>
+    <string name="text_to_speech">Text-to-Speech</string>
+    <string name="voice_speed">Voice Speed</string>
+    <string name="speed_slow">Slow</string>
+    <string name="speed_normal">Normal</string>
+    <string name="speed_fast">Fast</string>
+    <string name="speed_very_fast">Very Fast</string>
+    <string name="server">Server</string>
+    <string name="about">About</string>
+    
+    <!-- History Screen -->
+    <string name="history">History</string>
+    <string name="no_history">No history yet</string>
+    <string name="start_conversation">Start a conversation!</string>
+    <string name="clear">Clear</string>
+    
+    <!-- Errors -->
+    <string name="error_connection">Connection failed</string>
+    <string name="error_voice">Voice recognition failed</string>
+    <string name="error_unknown">Unknown error occurred</string>
+    
+    <!-- Notifications -->
+    <string name="notification_channel_name">Indxai Voice</string>
+    <string name="notification_listening">Listening for voice input</string>
+</resources>

@@ -49,3 +49,29 @@ service_account*.json
 # Local private key files
 *.pem
 *.key
+
+# Android / Gradle
+.gradle/
+**/build/
+local.properties
+*.iml
+*.hprof
+.cxx/
+*.apk
+*.aab
+*.dex
+*.class
+*.log
+
+# Gradle wrapper jar (optional - some prefer to commit it)
+gradle/wrapper/gradle-wrapper.jar
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+brain.db
+
+# OS generated files
+.DS_Store
+Thumbs.db

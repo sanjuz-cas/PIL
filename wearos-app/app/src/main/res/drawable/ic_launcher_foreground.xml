@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Background circle -->
+    <path
+        android:fillColor="#BB86FC"
+        android:pathData="M54,54m-30,0a30,30 0,1 1,60 0a30,30 0,1 1,-60 0" />
+    
+    <!-- AI brain icon -->
+    <path
+        android:fillColor="#1A1A2E"
+        android:pathData="M54,34c-11.05,0 -20,8.95 -20,20s8.95,20 20,20s20,-8.95 20,-20S65.05,34 54,34zM54,70c-8.84,0 -16,-7.16 -16,-16s7.16,-16 16,-16s16,7.16 16,16S62.84,70 54,70z" />
+    
+    <!-- Neural connections -->
+    <path
+        android:fillColor="#1A1A2E"
+        android:pathData="M54,42c-6.63,0 -12,5.37 -12,12s5.37,12 12,12s12,-5.37 12,-12S60.63,42 54,42zM54,62c-4.42,0 -8,-3.58 -8,-8s3.58,-8 8,-8s8,3.58 8,8S58.42,62 54,62z" />
+    
+    <!-- Center dot -->
+    <path
+        android:fillColor="#03DAC5"
+        android:pathData="M54,54m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0" />
+    
+    <!-- Connection lines -->
+    <path
+        android:strokeColor="#03DAC5"
+        android:strokeWidth="2"
+        android:pathData="M54,38L54,50M54,58L54,70M42,54L50,54M58,54L66,54" />
+    
+    <!-- Corner nodes -->
+    <path
+        android:fillColor="#03DAC5"
+        android:pathData="M44,44m-2,0a2,2 0,1 1,4 0a2,2 0,1 1,-4 0" />
+    <path
+        android:fillColor="#03DAC5"
+        android:pathData="M64,44m-2,0a2,2 0,1 1,4 0a2,2 0,1 1,-4 0" />
+    <path
+        android:fillColor="#03DAC5"
+        android:pathData="M44,64m-2,0a2,2 0,1 1,4 0a2,2 0,1 1,-4 0" />
+    <path
+        android:fillColor="#03DAC5"
+        android:pathData="M64,64m-2,0a2,2 0,1 1,4 0a2,2 0,1 1,-4 0" />
+</vector>

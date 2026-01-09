@@ -154,3 +154,24 @@ async def stats():
         "mode": engine.mode,
         "vae_trained": engine.memory_embeddings is not None,
     }
+
+
+@router.get("/v1/training-status")
+async def training_status():
+    """Get detailed training status with source breakdown"""
+    engine = get_engine()
+
+    # Get source breakdown from database
+    conn = engine.memory._get_connection()
+    cursor = conn.execute(
+        "SELECT source, COUNT(*) as count FROM knowledge GROUP BY source"
+    )
+    source_breakdown = {row[0]: row[1] for row in cursor.fetchall()}
+
+    return {
+        "status": "ready",
+        "total_knowledge": engine.memory.get_stats()["knowledge_entries"],
+        "vae_trained": engine.memory_embeddings is not None,
+        "source_breakdown": source_breakdown,
+        "user_trained_count": source_breakdown.get("user_training", 0),
+    }

@@ -1,0 +1,17 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <!-- Background circle -->
+    <path
+        android:fillColor="#E63946"
+        android:pathData="M24,0C10.745,0 0,10.745 0,24s10.745,24 24,24 24,-10.745 24,-24S37.255,0 24,0z"/>
+    <!-- Inner circles (brain pattern) -->
+    <path
+        android:fillColor="#F1FAEE"
+        android:pathData="M24,8c-8.837,0 -16,7.163 -16,16s7.163,16 16,16 16,-7.163 16,-16S32.837,8 24,8zM24,36c-6.627,0 -12,-5.373 -12,-12s5.373,-12 12,-12 12,5.373 12,12 -5.373,12 -12,12z"/>
+    <path
+        android:fillColor="#F1FAEE"
+        android:pathData="M24,16c-4.418,0 -8,3.582 -8,8s3.582,8 8,8 8,-3.582 8,-8 -3.582,-8 -8,-8zM24,28c-2.209,0 -4,-1.791 -4,-4s1.791,-4 4,-4 4,1.791 4,4 -1.791,4 -4,4z"/>
+</vector>

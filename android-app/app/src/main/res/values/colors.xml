@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Cherry Red Theme - matching the PIL branding -->
+    <color name="cherry_red">#E63946</color>
+    <color name="cherry_red_dark">#C5303C</color>
+    <color name="cherry_red_light">#FF6B7A</color>
+    
+    <!-- Dark Theme Background -->
+    <color name="dark_bg">#1A1A2E</color>
+    <color name="dark_surface">#252540</color>
+    <color name="dark_surface_variant">#2A2A4E</color>
+    
+    <!-- Beige/Cream accent -->
+    <color name="beige">#F1FAEE</color>
+    <color name="beige_dark">#E8EFE2</color>
+    
+    <!-- Status Colors -->
+    <color name="success_green">#4CAF50</color>
+    <color name="warning_yellow">#FFC107</color>
+    <color name="error_red">#F44336</color>
+    
+    <!-- Text Colors -->
+    <color name="text_primary">#F1FAEE</color>
+    <color name="text_secondary">#B8C5D6</color>
+    <color name="text_disabled">#6B7280</color>
+    
+    <!-- Message Bubbles -->
+    <color name="user_bubble">#E63946</color>
+    <color name="ai_bubble">#2A2A4E</color>
+</resources>

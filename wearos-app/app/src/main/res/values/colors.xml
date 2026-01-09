@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Cherry Color Palette (matching web app) -->
+    <color name="cherry_50">#FDF2F4</color>
+    <color name="cherry_100">#FCE7EA</color>
+    <color name="cherry_200">#F9D0D7</color>
+    <color name="cherry_300">#F4A9B6</color>
+    <color name="cherry_400">#EC7A8F</color>
+    <color name="cherry_500">#E04F6C</color>
+    <color name="cherry_600">#C93556</color>
+    <color name="cherry_700">#A92B47</color>
+    <color name="cherry_800">#8C2640</color>
+    <color name="cherry_900">#77243B</color>
+    <color name="cherry_950">#42101C</color>
+    
+    <!-- Beige Color Palette -->
+    <color name="beige_50">#FDFCFB</color>
+    <color name="beige_100">#F9F6F2</color>
+    <color name="beige_200">#EDE8E0</color>
+    <color name="beige_300">#DDD5C9</color>
+    
+    <!-- Standard Colors -->
+    <color name="white">#FFFFFF</color>
+    <color name="black">#000000</color>
+    <color name="transparent">#00000000</color>
+    
+    <!-- Theme Colors -->
+    <color name="primary">@color/cherry_600</color>
+    <color name="primary_variant">@color/cherry_800</color>
+    <color name="secondary">@color/cherry_400</color>
+    <color name="background">@color/cherry_900</color>
+    <color name="surface">@color/cherry_800</color>
+    <color name="on_primary">@color/white</color>
+    <color name="on_secondary">@color/white</color>
+    <color name="on_background">@color/beige_100</color>
+    <color name="on_surface">@color/beige_100</color>
+    
+    <!-- Status Colors -->
+    <color name="success">#4CAF50</color>
+    <color name="error">#CF6679</color>
+    <color name="warning">#FFC107</color>
+</resources>
