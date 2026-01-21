@@ -454,6 +454,10 @@ class PILOutputHead(nn.Module):
         self.register_buffer("W_vocab", torch.zeros(embed_dim, vocab_size))
 
         self.register_buffer("bias", torch.zeros(vocab_size))
+        
+        # Normalization parameters (set during fit)
+        self.register_buffer("hidden_mean", torch.zeros(embed_dim))
+        self.register_buffer("hidden_std", torch.ones(embed_dim))
 
         self._is_fitted = False
 
@@ -467,7 +471,14 @@ class PILOutputHead(nn.Module):
         Returns:
             Logits (batch, seq_len, vocab_size)
         """
-        return x @ self.W_vocab + self.bias
+        # Apply normalization if fitted
+        if self._is_fitted:
+            x = (x - self.hidden_mean) / self.hidden_std
+        
+        logits = x @ self.W_vocab + self.bias
+        # Clamp logits to prevent NaN in softmax
+        logits = torch.clamp(logits, min=-100, max=100)
+        return logits
 
     @torch.no_grad()
     def fit(self, hidden: torch.Tensor, target_ids: torch.Tensor) -> Dict:
@@ -489,6 +500,15 @@ class PILOutputHead(nn.Module):
         device = hidden.device
         dtype = hidden.dtype
 
+        # Normalize hidden states for numerical stability
+        hidden_mean = hidden.mean(dim=0, keepdim=True)
+        hidden_std = hidden.std(dim=0, keepdim=True) + 1e-8
+        hidden_norm = (hidden - hidden_mean) / hidden_std
+        
+        # Store normalization parameters for inference
+        self.hidden_mean.copy_(hidden_mean.squeeze(0))
+        self.hidden_std.copy_(hidden_std.squeeze(0))
+
         # Get unique tokens in target (much smaller than full vocab)
         unique_tokens = torch.unique(target_ids)
         num_active = len(unique_tokens)
@@ -497,9 +517,13 @@ class PILOutputHead(nn.Module):
             f"    Fitting output head: {N} samples, {num_active}/{self.vocab_size} active tokens"
         )
 
+        # Use stronger regularization for high-dimensional output
+        # Scale lambda with vocab size for stability
+        effective_lambda = self.lambda_reg * max(1, num_active / 1000)
+        
         # Compute H^T H + λI (shared for all columns)
-        HtH = hidden.T @ hidden
-        regularized = HtH + self.lambda_reg * torch.eye(D, device=device, dtype=dtype)
+        HtH = hidden_norm.T @ hidden_norm
+        regularized = HtH + effective_lambda * torch.eye(D, device=device, dtype=dtype)
 
         # Cholesky decomposition (solved once, reused)
         try:
@@ -522,7 +546,7 @@ class PILOutputHead(nn.Module):
             Y_chunk = (target_ids.unsqueeze(1) == chunk_tokens.unsqueeze(0)).float()
 
             # Solve: W_chunk = (H^T H + λI)^{-1} H^T Y_chunk
-            HtY = hidden.T @ Y_chunk
+            HtY = hidden_norm.T @ Y_chunk
 
             if use_cholesky:
                 W_chunk = torch.cholesky_solve(HtY, L)
@@ -540,12 +564,13 @@ class PILOutputHead(nn.Module):
         bias_chunk_size = 2000
         for i in range(0, num_active, bias_chunk_size):
             chunk_tokens = unique_tokens[i : min(i + bias_chunk_size, num_active)]
-            logits_chunk = hidden @ W_new[:, chunk_tokens]
+            logits_chunk = hidden_norm @ W_new[:, chunk_tokens]
             Y_chunk = (target_ids.unsqueeze(1) == chunk_tokens.unsqueeze(0)).float()
             residual = Y_chunk - logits_chunk
             self.bias[chunk_tokens] = residual.mean(dim=0)
             del logits_chunk, Y_chunk, residual
-            torch.cuda.empty_cache() if device.type == "cuda" else None
+            if device.type == "cuda":
+                torch.cuda.empty_cache()
 
         self._is_fitted = True
 
@@ -558,7 +583,8 @@ class PILOutputHead(nn.Module):
         acc_chunk_size = 1000
         for i in range(0, sample_size, acc_chunk_size):
             idx_chunk = sample_idx[i : min(i + acc_chunk_size, sample_size)]
-            logits_chunk = hidden[idx_chunk] @ self.W_vocab + self.bias
+            hidden_chunk_norm = (hidden[idx_chunk] - hidden_mean) / hidden_std
+            logits_chunk = hidden_chunk_norm @ self.W_vocab + self.bias
             pred_chunk = logits_chunk.argmax(dim=-1)
             correct += (pred_chunk == target_ids[idx_chunk]).sum().item()
             del logits_chunk, pred_chunk
@@ -822,8 +848,11 @@ class PILLanguageModel(nn.Module):
                     )
                     logits[indices_to_remove] = float("-inf")
 
-                # Sample
+                # Sample - handle NaN/inf safely
                 probs = F.softmax(logits, dim=-1)
+                # Replace NaN/inf with uniform distribution
+                if torch.isnan(probs).any() or torch.isinf(probs).any():
+                    probs = torch.ones_like(probs) / probs.size(-1)
                 next_token = torch.multinomial(probs, num_samples=1)
             else:
                 # Greedy
