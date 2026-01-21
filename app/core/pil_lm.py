@@ -806,11 +806,13 @@ class PILLanguageModel(nn.Module):
         # Process in batches to avoid OOM during attention
         num_batches = (B + fit_batch_size - 1) // fit_batch_size
 
+        # Maximum tokens to use for PIL fitting (subsample if needed)
+        max_fit_tokens = 100000  # 100K tokens is enough for good PIL solution
+
         # Fit each block's FFN by accumulating activations
         for block_idx, block in enumerate(self.blocks):
             # Collect activations from all batches for this block
             all_x_normed = []
-            all_x_out = []
 
             for batch_idx in range(num_batches):
                 start = batch_idx * fit_batch_size
@@ -840,8 +842,18 @@ class PILLanguageModel(nn.Module):
                     torch.cuda.empty_cache()
 
             # Concatenate all activations
-            x_normed_all = torch.cat(all_x_normed, dim=0).to(device)
+            x_normed_all = torch.cat(all_x_normed, dim=0)
             del all_x_normed
+
+            # Subsample if too many tokens (to fit in GPU memory)
+            total_tokens = x_normed_all.shape[0]
+            if total_tokens > max_fit_tokens:
+                indices = torch.randperm(total_tokens)[:max_fit_tokens]
+                x_normed_all = x_normed_all[indices]
+                if verbose and block_idx == 0:
+                    print(f"  Subsampling {total_tokens} -> {max_fit_tokens} tokens for PIL fitting")
+
+            x_normed_all = x_normed_all.to(device)
 
             # Fit FFN on accumulated activations
             ffn_stats = block.ffn.fit(x_normed_all)
@@ -861,12 +873,14 @@ class PILLanguageModel(nn.Module):
             print("  Computing final hidden states for output head...")
 
         all_final_hidden = []
+        all_targets = []
 
         for batch_idx in range(num_batches):
             start = batch_idx * fit_batch_size
             end = min(start + fit_batch_size, B)
 
             batch_input = input_ids[start:end]
+            batch_target = target_ids[start:end]
 
             # Get embeddings
             tok_emb = self.token_embedding(batch_input)
@@ -883,15 +897,25 @@ class PILLanguageModel(nn.Module):
 
             # Store (on CPU)
             all_final_hidden.append(x.reshape(-1, self.config.embed_dim).cpu())
+            all_targets.append(batch_target.reshape(-1).cpu())
 
             if device.type == "cuda":
                 torch.cuda.empty_cache()
 
-        # Fit output head
-        x_flat = torch.cat(all_final_hidden, dim=0).to(device)
-        target_flat = target_ids.reshape(-1).to(device)
+        # Concatenate and subsample for output head fitting
+        x_flat = torch.cat(all_final_hidden, dim=0)
+        target_flat = torch.cat(all_targets, dim=0)
+        del all_final_hidden, all_targets
 
-        del all_final_hidden
+        # Subsample if needed
+        total_tokens = x_flat.shape[0]
+        if total_tokens > max_fit_tokens:
+            indices = torch.randperm(total_tokens)[:max_fit_tokens]
+            x_flat = x_flat[indices]
+            target_flat = target_flat[indices]
+
+        x_flat = x_flat.to(device)
+        target_flat = target_flat.to(device)
 
         head_stats = self.output_head.fit(x_flat, target_flat)
         stats["head_accuracy"] = head_stats.get("accuracy", 0)
