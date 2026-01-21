@@ -836,7 +836,7 @@ class PILLanguageModel(nn.Module):
                 all_x_normed.append(x_normed.reshape(-1, self.config.embed_dim).cpu())
 
                 # Clear cache
-                if device.type == 'cuda':
+                if device.type == "cuda":
                     torch.cuda.empty_cache()
 
             # Concatenate all activations
@@ -853,7 +853,7 @@ class PILLanguageModel(nn.Module):
                 )
 
             del x_normed_all
-            if device.type == 'cuda':
+            if device.type == "cuda":
                 torch.cuda.empty_cache()
 
         # Final pass to get hidden states for output head
@@ -884,7 +884,7 @@ class PILLanguageModel(nn.Module):
             # Store (on CPU)
             all_final_hidden.append(x.reshape(-1, self.config.embed_dim).cpu())
 
-            if device.type == 'cuda':
+            if device.type == "cuda":
                 torch.cuda.empty_cache()
 
         # Fit output head
