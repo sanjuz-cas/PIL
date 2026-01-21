@@ -853,6 +853,8 @@ class PILLanguageModel(nn.Module):
         top_k: int = None,
         top_p: float = None,
         do_sample: bool = True,
+        eos_token_id: int = None,
+        pad_token_id: int = None,
     ) -> torch.Tensor:
         """
         Generate new tokens autoregressively.
@@ -864,6 +866,8 @@ class PILLanguageModel(nn.Module):
             top_k: Top-k sampling
             top_p: Nucleus sampling threshold
             do_sample: Whether to sample (False = greedy)
+            eos_token_id: Stop generation at this token (default: 50256 for GPT-2)
+            pad_token_id: Padding token for finished sequences
 
         Returns:
             Generated token IDs (batch, seq_len + max_new_tokens)
@@ -871,6 +875,11 @@ class PILLanguageModel(nn.Module):
         temperature = temperature or self.config.temperature
         top_k = top_k or self.config.top_k
         top_p = top_p or self.config.top_p
+        eos_token_id = eos_token_id if eos_token_id is not None else 50256  # GPT-2 EOS
+        pad_token_id = pad_token_id if pad_token_id is not None else eos_token_id
+        
+        batch_size = input_ids.shape[0]
+        finished = torch.zeros(batch_size, dtype=torch.bool, device=input_ids.device)
 
         for _ in range(max_new_tokens):
             # Crop to max length
@@ -916,8 +925,22 @@ class PILLanguageModel(nn.Module):
                 # Greedy
                 next_token = logits.argmax(dim=-1, keepdim=True)
 
+            # Replace with pad token for finished sequences
+            next_token = torch.where(
+                finished.unsqueeze(1),
+                torch.full_like(next_token, pad_token_id),
+                next_token
+            )
+            
             # Append
             input_ids = torch.cat([input_ids, next_token], dim=1)
+            
+            # Check for EOS
+            finished = finished | (next_token.squeeze(-1) == eos_token_id)
+            
+            # Stop if all sequences finished
+            if finished.all():
+                break
 
         return input_ids
 
