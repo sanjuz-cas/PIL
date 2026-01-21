@@ -454,7 +454,7 @@ class PILOutputHead(nn.Module):
         self.register_buffer("W_vocab", torch.zeros(embed_dim, vocab_size))
 
         self.register_buffer("bias", torch.zeros(vocab_size))
-        
+
         # Normalization parameters (set during fit)
         self.register_buffer("hidden_mean", torch.zeros(embed_dim))
         self.register_buffer("hidden_std", torch.ones(embed_dim))
@@ -474,7 +474,7 @@ class PILOutputHead(nn.Module):
         # Apply normalization if fitted
         if self._is_fitted:
             x = (x - self.hidden_mean) / self.hidden_std
-        
+
         logits = x @ self.W_vocab + self.bias
         # Clamp logits to prevent NaN in softmax
         logits = torch.clamp(logits, min=-100, max=100)
@@ -504,7 +504,7 @@ class PILOutputHead(nn.Module):
         hidden_mean = hidden.mean(dim=0, keepdim=True)
         hidden_std = hidden.std(dim=0, keepdim=True) + 1e-8
         hidden_norm = (hidden - hidden_mean) / hidden_std
-        
+
         # Store normalization parameters for inference
         self.hidden_mean.copy_(hidden_mean.squeeze(0))
         self.hidden_std.copy_(hidden_std.squeeze(0))
@@ -520,7 +520,7 @@ class PILOutputHead(nn.Module):
         # Use stronger regularization for high-dimensional output
         # Scale lambda with vocab size for stability
         effective_lambda = self.lambda_reg * max(1, num_active / 1000)
-        
+
         # Compute H^T H + λI (shared for all columns)
         HtH = hidden_norm.T @ hidden_norm
         regularized = HtH + effective_lambda * torch.eye(D, device=device, dtype=dtype)
