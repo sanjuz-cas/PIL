@@ -535,21 +535,35 @@ class PILOutputHead(nn.Module):
         # Update weights
         self.W_vocab.copy_(W_new)
 
-        # Compute bias for active tokens only
+        # Compute bias efficiently (in chunks to avoid OOM)
         self.bias.zero_()
-        logits_active = hidden @ W_new[:, unique_tokens]
-        Y_active = (target_ids.unsqueeze(1) == unique_tokens.unsqueeze(0)).float()
-        residual = Y_active - logits_active
-        self.bias[unique_tokens] = residual.mean(dim=0)
+        bias_chunk_size = 2000
+        for i in range(0, num_active, bias_chunk_size):
+            chunk_tokens = unique_tokens[i:min(i + bias_chunk_size, num_active)]
+            logits_chunk = hidden @ W_new[:, chunk_tokens]
+            Y_chunk = (target_ids.unsqueeze(1) == chunk_tokens.unsqueeze(0)).float()
+            residual = Y_chunk - logits_chunk
+            self.bias[chunk_tokens] = residual.mean(dim=0)
+            del logits_chunk, Y_chunk, residual
+            torch.cuda.empty_cache() if device.type == 'cuda' else None
 
         self._is_fitted = True
 
-        # Statistics (compute accuracy on subset)
-        sample_size = min(10000, N)
-        sample_idx = torch.randperm(N)[:sample_size]
-        logits_sample = hidden[sample_idx] @ self.W_vocab + self.bias
-        pred = logits_sample.argmax(dim=-1)
-        accuracy = (pred == target_ids[sample_idx]).float().mean().item()
+        # Statistics (compute accuracy on small sample to avoid OOM)
+        sample_size = min(5000, N)
+        sample_idx = torch.randperm(N, device=device)[:sample_size]
+        
+        # Compute accuracy in chunks
+        correct = 0
+        acc_chunk_size = 1000
+        for i in range(0, sample_size, acc_chunk_size):
+            idx_chunk = sample_idx[i:min(i + acc_chunk_size, sample_size)]
+            logits_chunk = hidden[idx_chunk] @ self.W_vocab + self.bias
+            pred_chunk = logits_chunk.argmax(dim=-1)
+            correct += (pred_chunk == target_ids[idx_chunk]).sum().item()
+            del logits_chunk, pred_chunk
+        
+        accuracy = correct / sample_size
 
         return {"success": True, "accuracy": accuracy, "active_tokens": num_active}
 
