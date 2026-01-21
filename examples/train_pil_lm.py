@@ -539,7 +539,16 @@ def main():
     parser.add_argument(
         "--save_path", type=str, default="outputs/pil_lm", help="Save path"
     )
+    parser.add_argument(
+        "--device", type=str, default="auto", help="Device (cuda, cpu, or auto)"
+    )
     args = parser.parse_args()
+
+    # Set device
+    if args.device == "auto":
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    else:
+        device = args.device
 
     # Training config
     train_config = TrainingConfig(
@@ -550,6 +559,7 @@ def main():
         max_train_samples=args.max_train_samples,
         max_eval_samples=args.max_eval_samples,
         save_path=args.save_path,
+        device=device,
     )
 
     # Load tokenizer
