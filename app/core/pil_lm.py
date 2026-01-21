@@ -877,7 +877,7 @@ class PILLanguageModel(nn.Module):
         top_p = top_p or self.config.top_p
         eos_token_id = eos_token_id if eos_token_id is not None else 50256  # GPT-2 EOS
         pad_token_id = pad_token_id if pad_token_id is not None else eos_token_id
-        
+
         batch_size = input_ids.shape[0]
         finished = torch.zeros(batch_size, dtype=torch.bool, device=input_ids.device)
 
@@ -929,15 +929,15 @@ class PILLanguageModel(nn.Module):
             next_token = torch.where(
                 finished.unsqueeze(1),
                 torch.full_like(next_token, pad_token_id),
-                next_token
+                next_token,
             )
-            
+
             # Append
             input_ids = torch.cat([input_ids, next_token], dim=1)
-            
+
             # Check for EOS
             finished = finished | (next_token.squeeze(-1) == eos_token_id)
-            
+
             # Stop if all sequences finished
             if finished.all():
                 break
