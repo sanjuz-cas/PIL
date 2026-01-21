@@ -778,16 +778,19 @@ class PILLanguageModel(nn.Module):
         input_ids: torch.Tensor,
         target_ids: torch.Tensor,
         verbose: bool = True,
+        fit_batch_size: int = 64,
     ) -> Dict:
         """
         Fit all PIL layers (FFNs and output head) in one shot.
 
         This is the main training function for PIL components.
+        Uses batched processing through attention to avoid OOM.
 
         Args:
             input_ids: Input token IDs (batch, seq_len)
             target_ids: Target token IDs (batch, seq_len) - shifted by 1
             verbose: Print progress
+            fit_batch_size: Batch size for forward pass (smaller = less memory)
 
         Returns:
             Training statistics
@@ -796,43 +799,99 @@ class PILLanguageModel(nn.Module):
         device = input_ids.device
 
         if verbose:
-            print(f"Fitting PIL layers: {B * T} tokens")
+            print(f"Fitting PIL layers: {B * T} tokens (batch_size={fit_batch_size})")
 
         stats = {"ffn_mse": [], "head_accuracy": 0}
 
-        # Get embeddings
-        tok_emb = self.token_embedding(input_ids)
-        positions = torch.arange(T, device=device).unsqueeze(0)
-        pos_emb = self.position_embedding(positions)
-        x = tok_emb + pos_emb
+        # Process in batches to avoid OOM during attention
+        num_batches = (B + fit_batch_size - 1) // fit_batch_size
 
-        # Fit each block's FFN
-        for i, block in enumerate(self.blocks):
-            # Forward through attention
-            x_attn = x + block.attention(block.ln1(x))
-            x_normed = block.ln2(x_attn)
+        # Fit each block's FFN by accumulating activations
+        for block_idx, block in enumerate(self.blocks):
+            # Collect activations from all batches for this block
+            all_x_normed = []
+            all_x_out = []
 
-            # Flatten for PIL fitting
-            x_flat = x_normed.reshape(-1, self.config.embed_dim)
+            for batch_idx in range(num_batches):
+                start = batch_idx * fit_batch_size
+                end = min(start + fit_batch_size, B)
 
-            # Fit FFN (identity mapping for residual learning)
-            ffn_stats = block.ffn.fit(x_flat)
+                batch_input = input_ids[start:end]
+
+                # Get embeddings
+                tok_emb = self.token_embedding(batch_input)
+                positions = torch.arange(T, device=device).unsqueeze(0)
+                pos_emb = self.position_embedding(positions)
+                x = tok_emb + pos_emb
+
+                # Forward through previous blocks (already fitted)
+                for prev_block in self.blocks[:block_idx]:
+                    x = prev_block(x)
+
+                # Forward through attention of current block
+                x_attn = x + block.attention(block.ln1(x))
+                x_normed = block.ln2(x_attn)
+
+                # Store activations (move to CPU to save GPU memory)
+                all_x_normed.append(x_normed.reshape(-1, self.config.embed_dim).cpu())
+
+                # Clear cache
+                if device.type == 'cuda':
+                    torch.cuda.empty_cache()
+
+            # Concatenate all activations
+            x_normed_all = torch.cat(all_x_normed, dim=0).to(device)
+            del all_x_normed
+
+            # Fit FFN on accumulated activations
+            ffn_stats = block.ffn.fit(x_normed_all)
             stats["ffn_mse"].append(ffn_stats.get("mse", 0))
 
             if verbose:
                 print(
-                    f"  Block {i + 1}/{self.config.num_layers}: FFN MSE = {ffn_stats.get('mse', 0):.6f}"
+                    f"  Block {block_idx + 1}/{self.config.num_layers}: FFN MSE = {ffn_stats.get('mse', 0):.6f}"
                 )
 
-            # Forward through fitted FFN
-            x = block.ffn(x_normed)
+            del x_normed_all
+            if device.type == 'cuda':
+                torch.cuda.empty_cache()
 
-        # Final layer norm
-        x = self.ln_f(x)
+        # Final pass to get hidden states for output head
+        if verbose:
+            print("  Computing final hidden states for output head...")
+
+        all_final_hidden = []
+
+        for batch_idx in range(num_batches):
+            start = batch_idx * fit_batch_size
+            end = min(start + fit_batch_size, B)
+
+            batch_input = input_ids[start:end]
+
+            # Get embeddings
+            tok_emb = self.token_embedding(batch_input)
+            positions = torch.arange(T, device=device).unsqueeze(0)
+            pos_emb = self.position_embedding(positions)
+            x = tok_emb + pos_emb
+
+            # Forward through all blocks (now fitted)
+            for block in self.blocks:
+                x = block(x)
+
+            # Final layer norm
+            x = self.ln_f(x)
+
+            # Store (on CPU)
+            all_final_hidden.append(x.reshape(-1, self.config.embed_dim).cpu())
+
+            if device.type == 'cuda':
+                torch.cuda.empty_cache()
 
         # Fit output head
-        x_flat = x.reshape(-1, self.config.embed_dim)
-        target_flat = target_ids.reshape(-1)
+        x_flat = torch.cat(all_final_hidden, dim=0).to(device)
+        target_flat = target_ids.reshape(-1).to(device)
+
+        del all_final_hidden
 
         head_stats = self.output_head.fit(x_flat, target_flat)
         stats["head_accuracy"] = head_stats.get("accuracy", 0)
