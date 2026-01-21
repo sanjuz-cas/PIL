@@ -25,6 +25,7 @@ from pil_flow import PILFlowMatching, PILFlowConfig
 @dataclass
 class BenchmarkResult:
     """Results from a benchmark run."""
+
     method: str
     n_samples: int
     input_dim: int
@@ -40,20 +41,20 @@ class BenchmarkResult:
 def estimate_memory_usage(model: PILFlowMatching) -> float:
     """Estimate memory usage of model in MB."""
     total_bytes = 0
-    
+
     for vf in model.velocity_fields.values():
         # Random weights
-        if hasattr(vf, 'W_random'):
+        if hasattr(vf, "W_random"):
             total_bytes += vf.W_random.nbytes
-        if hasattr(vf, 'W_fwd'):
+        if hasattr(vf, "W_fwd"):
             total_bytes += vf.W_fwd.nbytes
-        if hasattr(vf, 'W_bwd'):
+        if hasattr(vf, "W_bwd"):
             total_bytes += vf.W_bwd.nbytes
-        
+
         # Learned weights
         total_bytes += vf.W_out.nbytes
         total_bytes += vf.bias.nbytes
-    
+
     return total_bytes / (1024 * 1024)
 
 
@@ -67,7 +68,7 @@ def run_benchmark(
 ) -> BenchmarkResult:
     """
     Run a single benchmark configuration.
-    
+
     Args:
         input_dim: Input dimension
         hidden_dim: Hidden layer dimension
@@ -75,14 +76,14 @@ def run_benchmark(
         n_timesteps: Number of timesteps
         use_bipil: Use bidirectional PIL
         n_gen_samples: Number of samples to generate
-        
+
     Returns:
         BenchmarkResult with metrics
     """
     # Create synthetic data
     rng = np.random.default_rng(42)
     X_data = rng.standard_normal((n_samples, input_dim)).astype(np.float32)
-    
+
     # Configuration
     config = PILFlowConfig(
         input_dim=input_dim,
@@ -94,25 +95,25 @@ def run_benchmark(
         per_timestep_fit=True,
         seed=42,
     )
-    
+
     # Create model
     model = PILFlowMatching(config)
-    
+
     # Training
     train_start = time.time()
     train_stats = model.fit(X_data, verbose=False)
     train_time = time.time() - train_start
-    
+
     # Memory
     memory_mb = estimate_memory_usage(model)
-    
+
     # Generation
     gen_start = time.time()
     samples = model.sample(n_gen_samples)
     gen_time = time.time() - gen_start
-    
+
     samples_per_second = n_gen_samples / gen_time
-    
+
     return BenchmarkResult(
         method="BiPIL-Flow" if use_bipil else "PIL-Flow",
         n_samples=n_samples,
@@ -132,9 +133,9 @@ def benchmark_scaling():
     print("=" * 70)
     print("PIL-Flow Scaling Benchmark")
     print("=" * 70)
-    
+
     results: List[BenchmarkResult] = []
-    
+
     # Test 1: Scaling with input dimension
     print("\n1. Scaling with Input Dimension")
     print("-" * 50)
@@ -146,9 +147,11 @@ def benchmark_scaling():
             n_timesteps=20,
         )
         results.append(result)
-        print(f"  dim={dim:4d}: train={result.train_time:.2f}s, "
-              f"MSE={result.avg_mse:.4f}, mem={result.memory_mb:.1f}MB")
-    
+        print(
+            f"  dim={dim:4d}: train={result.train_time:.2f}s, "
+            f"MSE={result.avg_mse:.4f}, mem={result.memory_mb:.1f}MB"
+        )
+
     # Test 2: Scaling with training samples
     print("\n2. Scaling with Training Samples")
     print("-" * 50)
@@ -160,9 +163,11 @@ def benchmark_scaling():
             n_timesteps=20,
         )
         results.append(result)
-        print(f"  N={n_samples:5d}: train={result.train_time:.2f}s, "
-              f"MSE={result.avg_mse:.4f}")
-    
+        print(
+            f"  N={n_samples:5d}: train={result.train_time:.2f}s, "
+            f"MSE={result.avg_mse:.4f}"
+        )
+
     # Test 3: Scaling with hidden dimension
     print("\n3. Scaling with Hidden Dimension")
     print("-" * 50)
@@ -174,9 +179,11 @@ def benchmark_scaling():
             n_timesteps=20,
         )
         results.append(result)
-        print(f"  hidden={hidden_dim:4d}: train={result.train_time:.2f}s, "
-              f"MSE={result.avg_mse:.4f}, mem={result.memory_mb:.1f}MB")
-    
+        print(
+            f"  hidden={hidden_dim:4d}: train={result.train_time:.2f}s, "
+            f"MSE={result.avg_mse:.4f}, mem={result.memory_mb:.1f}MB"
+        )
+
     # Test 4: Scaling with timesteps
     print("\n4. Scaling with Timesteps")
     print("-" * 50)
@@ -188,9 +195,11 @@ def benchmark_scaling():
             n_timesteps=n_timesteps,
         )
         results.append(result)
-        print(f"  T={n_timesteps:3d}: train={result.train_time:.2f}s, "
-              f"MSE={result.avg_mse:.4f}, mem={result.memory_mb:.1f}MB")
-    
+        print(
+            f"  T={n_timesteps:3d}: train={result.train_time:.2f}s, "
+            f"MSE={result.avg_mse:.4f}, mem={result.memory_mb:.1f}MB"
+        )
+
     # Test 5: PIL vs BiPIL
     print("\n5. PIL vs BiPIL Comparison")
     print("-" * 50)
@@ -203,23 +212,25 @@ def benchmark_scaling():
             use_bipil=use_bipil,
         )
         results.append(result)
-        print(f"  {result.method:12s}: train={result.train_time:.2f}s, "
-              f"MSE={result.avg_mse:.4f}, mem={result.memory_mb:.1f}MB")
-    
+        print(
+            f"  {result.method:12s}: train={result.train_time:.2f}s, "
+            f"MSE={result.avg_mse:.4f}, mem={result.memory_mb:.1f}MB"
+        )
+
     return results
 
 
 def benchmark_vs_gradient():
     """
     Compare PIL-Flow training time vs estimated gradient-based training.
-    
+
     Note: This is a theoretical comparison since we don't implement
     gradient-based flow matching here.
     """
     print("\n" + "=" * 70)
     print("PIL-Flow vs Gradient-Based (Theoretical Comparison)")
     print("=" * 70)
-    
+
     # PIL-Flow benchmark
     result = run_benchmark(
         input_dim=784,
@@ -227,32 +238,32 @@ def benchmark_vs_gradient():
         n_samples=5000,
         n_timesteps=50,
     )
-    
+
     print(f"\nPIL-Flow:")
     print(f"  Training time: {result.train_time:.2f}s")
     print(f"  This is ONE pass through the data (closed-form solution)")
-    
+
     # Theoretical gradient-based estimate
     # Typical: 100-500 epochs, each epoch processes all data
     # Each backward pass is ~2x forward pass
     n_epochs_typical = 200
     forward_time_per_epoch = result.train_time / 50  # Approximate
     backward_multiplier = 2.0
-    
+
     estimated_gradient_time = (
-        n_epochs_typical * 
-        forward_time_per_epoch * 
-        (1 + backward_multiplier)  # Forward + backward
+        n_epochs_typical
+        * forward_time_per_epoch
+        * (1 + backward_multiplier)  # Forward + backward
     )
-    
+
     print(f"\nGradient-Based (Estimated):")
     print(f"  Epochs: {n_epochs_typical}")
     print(f"  Estimated time: {estimated_gradient_time:.2f}s")
     print(f"  (Forward + Backward per epoch)")
-    
+
     speedup = estimated_gradient_time / result.train_time
     print(f"\nEstimated Speedup: {speedup:.1f}x faster with PIL")
-    
+
     print("\nNote: This is a theoretical estimate. Actual speedup depends on:")
     print("  - Hardware (GPU vs CPU)")
     print("  - Batch size")
@@ -264,13 +275,13 @@ def main():
     print("PIL-Flow Benchmarking Suite")
     print("Gradient-Free Flow Matching Performance Analysis")
     print()
-    
+
     # Run scaling benchmarks
     results = benchmark_scaling()
-    
+
     # Theoretical comparison
     benchmark_vs_gradient()
-    
+
     # Summary
     print("\n" + "=" * 70)
     print("Key Findings")

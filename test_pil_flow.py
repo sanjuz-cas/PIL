@@ -1,7 +1,9 @@
 """
 Quick test script for PIL-Flow
 """
+
 import sys
+
 sys.path.insert(0, ".")
 
 from pil_flow import PILFlowMatching, PILFlowConfig
