@@ -851,7 +851,9 @@ class PILLanguageModel(nn.Module):
                 indices = torch.randperm(total_tokens)[:max_fit_tokens]
                 x_normed_all = x_normed_all[indices]
                 if verbose and block_idx == 0:
-                    print(f"  Subsampling {total_tokens} -> {max_fit_tokens} tokens for PIL fitting")
+                    print(
+                        f"  Subsampling {total_tokens} -> {max_fit_tokens} tokens for PIL fitting"
+                    )
 
             x_normed_all = x_normed_all.to(device)
 
