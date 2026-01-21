@@ -435,32 +435,32 @@ class PILTransformerBlock(nn.Module):
 class TiedOutputHead(nn.Module):
     """
     Output head with weight tying to input embeddings.
-    
+
     This is the standard approach in modern LMs (GPT-2, BERT, etc.)
     and works much better than PIL for vocabulary projection.
-    
+
     logits = hidden @ embedding.T + bias
     """
-    
+
     def __init__(self, embed_dim: int, vocab_size: int, embedding_weight: torch.Tensor):
         super().__init__()
         self.embed_dim = embed_dim
         self.vocab_size = vocab_size
-        
+
         # Reference to embedding weights (tied)
         self.embedding_weight = embedding_weight
-        
+
         # Learnable bias
         self.bias = nn.Parameter(torch.zeros(vocab_size))
-        
+
         self._is_fitted = True  # Always "fitted" since it uses embeddings
-    
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Compute logits using tied weights."""
         # logits = x @ W_embed.T + bias
         logits = F.linear(x, self.embedding_weight, self.bias)
         return logits
-    
+
     def fit(self, hidden: torch.Tensor, target_ids: torch.Tensor) -> Dict:
         """No fitting needed - weights are tied to embeddings."""
         # Compute accuracy for logging
@@ -470,9 +470,9 @@ class TiedOutputHead(nn.Module):
             logits = F.linear(hidden[idx], self.embedding_weight, self.bias)
             pred = logits.argmax(dim=-1)
             accuracy = (pred == target_ids[idx]).float().mean().item()
-        
+
         return {"success": True, "accuracy": accuracy, "method": "weight_tying"}
-    
+
     @property
     def is_fitted(self) -> bool:
         return True
@@ -483,7 +483,7 @@ class PILOutputHead(nn.Module):
     Output head that maps hidden states to vocabulary logits.
 
     Solved via PIL: W_vocab = (H^T H + λI)^{-1} H^T Y_onehot
-    
+
     NOTE: This is experimental. For better results, use TiedOutputHead
     with weight_tying=True in config.
     """
