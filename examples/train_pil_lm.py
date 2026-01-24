@@ -464,6 +464,8 @@ def generate_samples(
     prompts: List[str],
     max_new_tokens: int = 50,
     device: str = "cpu",
+    temperature: float = 0.7,
+    repetition_penalty: float = 1.3,
 ) -> List[str]:
     """Generate text samples from the model."""
     model.eval()
@@ -489,13 +491,14 @@ def generate_samples(
 
         input_ids = input_ids.to(device)
 
-        # Generate
+        # Generate with repetition penalty
         output_ids = model.generate(
             input_ids,
             max_new_tokens=max_new_tokens,
-            temperature=0.8,
+            temperature=temperature,
             top_k=50,
             top_p=0.9,
+            repetition_penalty=repetition_penalty,
         )
 
         # Decode

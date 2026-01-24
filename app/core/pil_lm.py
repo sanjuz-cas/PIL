@@ -940,6 +940,7 @@ class PILLanguageModel(nn.Module):
         do_sample: bool = True,
         eos_token_id: int = None,
         pad_token_id: int = None,
+        repetition_penalty: float = 1.2,
     ) -> torch.Tensor:
         """
         Generate new tokens autoregressively.
@@ -953,6 +954,7 @@ class PILLanguageModel(nn.Module):
             do_sample: Whether to sample (False = greedy)
             eos_token_id: Stop generation at this token (default: 50256 for GPT-2)
             pad_token_id: Padding token for finished sequences
+            repetition_penalty: Penalty for repeating tokens (>1.0 = less repetition)
 
         Returns:
             Generated token IDs (batch, seq_len + max_new_tokens)
@@ -975,6 +977,18 @@ class PILLanguageModel(nn.Module):
 
             # Get last token logits
             logits = logits[:, -1, :] / temperature
+
+            # Apply repetition penalty
+            if repetition_penalty != 1.0:
+                for i in range(batch_size):
+                    # Get unique tokens in the generated sequence
+                    generated_tokens = input_ids[i].unique()
+                    # Penalize repeated tokens
+                    for token in generated_tokens:
+                        if logits[i, token] > 0:
+                            logits[i, token] /= repetition_penalty
+                        else:
+                            logits[i, token] *= repetition_penalty
 
             if do_sample:
                 # Top-k filtering
