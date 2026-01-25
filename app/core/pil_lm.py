@@ -185,9 +185,6 @@ class BiPILFFN(nn.Module):
         # Bias
         self.register_buffer("bias", torch.zeros(embed_dim))
 
-        # Layer norm
-        self.layer_norm = nn.LayerNorm(embed_dim)
-
         # State
         self._is_fitted = False
 
@@ -207,68 +204,83 @@ class BiPILFFN(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass with residual connection.
+        Forward pass WITHOUT residual connection (handled by block).
 
         Args:
-            x: Input (batch, seq_len, embed_dim)
+            x: Input (batch, seq_len, embed_dim) - should be ln2(x_attn)
 
         Returns:
-            Output (batch, seq_len, embed_dim)
+            Output (batch, seq_len, embed_dim) - FFN output only
         """
-        residual = x
-
         # Feature expansion
         H = self._expand(x)
 
         # Output projection
         out = H @ self.W_out + self.bias
 
-        # Residual + LayerNorm
-        out = self.layer_norm(out + residual)
-
         return out
 
     @torch.no_grad()
-    def fit(self, x: torch.Tensor, target: Optional[torch.Tensor] = None) -> Dict:
+    def fit(
+        self, 
+        x: torch.Tensor, 
+        target: Optional[torch.Tensor] = None,
+        mode: Literal["identity", "residual", "reconstruction"] = "residual"
+    ) -> Dict:
         """
         Solve for W_out using pseudoinverse.
 
         Args:
             x: Input tensor (N, embed_dim) - flattened
-            target: Target tensor. If None, learns identity (residual)
+            target: Target tensor. If None, behavior depends on mode
+            mode: 
+                - "identity": Learn to map x -> x (default)
+                - "residual": Learn to map x -> 0 (output + residual = x)
+                - "reconstruction": Learn x -> target
 
         Returns:
             Fit statistics
         """
-        if target is None:
-            target = x  # Identity mapping for residual learning
-
         # Flatten if needed
         if x.dim() > 2:
-            orig_shape = x.shape
             x = x.reshape(-1, self.embed_dim)
-            target = target.reshape(-1, self.embed_dim)
+            if target is not None:
+                target = target.reshape(-1, self.embed_dim)
+
+        # Determine what to fit
+        if target is not None:
+            # Explicit target provided
+            fit_target = target
+        elif mode == "identity":
+            # Learn to reproduce input (autoencoder)
+            fit_target = x
+        elif mode == "residual":
+            # Learn near-zero output so residual dominates initially
+            # This is better for transformer residual streams
+            fit_target = torch.zeros_like(x)
+        else:
+            fit_target = x
 
         # Feature expansion
         H = self._expand(x)
 
         # Solve via PIL
-        W_new = ridge_solve(H, target, self.lambda_reg)
+        W_new = ridge_solve(H, fit_target, self.lambda_reg)
 
         # Update weights
         self.W_out.copy_(W_new)
 
         # Compute bias
-        residual = target - (H @ self.W_out)
+        residual = fit_target - (H @ self.W_out)
         self.bias.copy_(residual.mean(dim=0))
 
         self._is_fitted = True
 
         # Statistics
         out = H @ self.W_out + self.bias
-        mse = F.mse_loss(out, target).item()
+        mse = F.mse_loss(out, fit_target).item()
 
-        return {"success": True, "mse": mse}
+        return {"success": True, "mse": mse, "mode": mode}
 
     @property
     def is_fitted(self) -> bool:
@@ -412,12 +424,12 @@ class PILTransformerBlock(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass."""
+        """Forward pass with proper residual connections."""
         # Attention with residual
         x = x + self.dropout(self.attention(self.ln1(x)))
 
-        # FFN with residual (handled inside FFN)
-        x = self.ffn(self.ln2(x))
+        # FFN with residual (residual is x, not ln2(x))
+        x = x + self.dropout(self.ffn(self.ln2(x)))
 
         return x
 
@@ -779,18 +791,27 @@ class PILLanguageModel(nn.Module):
         target_ids: torch.Tensor,
         verbose: bool = True,
         fit_batch_size: int = 64,
+        use_target_propagation: bool = True,
     ) -> Dict:
         """
-        Fit all PIL layers (FFNs and output head) in one shot.
+        Fit all PIL layers (FFNs and output head) using target propagation.
 
         This is the main training function for PIL components.
         Uses batched processing through attention to avoid OOM.
+
+        Key Innovation: Target Propagation
+        ----------------------------------
+        Instead of fitting FFN to identity (useless), we:
+        1. First fit the output head to predict next tokens
+        2. Compute per-layer targets by backpropagating "ideal" hidden states
+        3. Each FFN learns to transform features toward the ideal
 
         Args:
             input_ids: Input token IDs (batch, seq_len)
             target_ids: Target token IDs (batch, seq_len) - shifted by 1
             verbose: Print progress
             fit_batch_size: Batch size for forward pass (smaller = less memory)
+            use_target_propagation: Use target propagation for FFN fitting
 
         Returns:
             Training statistics
@@ -806,75 +827,14 @@ class PILLanguageModel(nn.Module):
         # Process in batches to avoid OOM during attention
         num_batches = (B + fit_batch_size - 1) // fit_batch_size
 
-        # Maximum tokens to use for PIL fitting (subsample if needed)
-        max_fit_tokens = 100000  # 100K tokens is enough for good PIL solution
+        # Maximum tokens to use for PIL fitting
+        max_fit_tokens = 100000
 
-        # Fit each block's FFN by accumulating activations
-        for block_idx, block in enumerate(self.blocks):
-            # Collect activations from all batches for this block
-            all_x_normed = []
-
-            for batch_idx in range(num_batches):
-                start = batch_idx * fit_batch_size
-                end = min(start + fit_batch_size, B)
-
-                batch_input = input_ids[start:end]
-
-                # Get embeddings
-                tok_emb = self.token_embedding(batch_input)
-                positions = torch.arange(T, device=device).unsqueeze(0)
-                pos_emb = self.position_embedding(positions)
-                x = tok_emb + pos_emb
-
-                # Forward through previous blocks (already fitted)
-                for prev_block in self.blocks[:block_idx]:
-                    x = prev_block(x)
-
-                # Forward through attention of current block
-                x_attn = x + block.attention(block.ln1(x))
-                x_normed = block.ln2(x_attn)
-
-                # Store activations (move to CPU to save GPU memory)
-                all_x_normed.append(x_normed.reshape(-1, self.config.embed_dim).cpu())
-
-                # Clear cache
-                if device.type == "cuda":
-                    torch.cuda.empty_cache()
-
-            # Concatenate all activations
-            x_normed_all = torch.cat(all_x_normed, dim=0)
-            del all_x_normed
-
-            # Subsample if too many tokens (to fit in GPU memory)
-            total_tokens = x_normed_all.shape[0]
-            if total_tokens > max_fit_tokens:
-                indices = torch.randperm(total_tokens)[:max_fit_tokens]
-                x_normed_all = x_normed_all[indices]
-                if verbose and block_idx == 0:
-                    print(
-                        f"  Subsampling {total_tokens} -> {max_fit_tokens} tokens for PIL fitting"
-                    )
-
-            x_normed_all = x_normed_all.to(device)
-
-            # Fit FFN on accumulated activations
-            ffn_stats = block.ffn.fit(x_normed_all)
-            stats["ffn_mse"].append(ffn_stats.get("mse", 0))
-
-            if verbose:
-                print(
-                    f"  Block {block_idx + 1}/{self.config.num_layers}: FFN MSE = {ffn_stats.get('mse', 0):.6f}"
-                )
-
-            del x_normed_all
-            if device.type == "cuda":
-                torch.cuda.empty_cache()
-
-        # Final pass to get hidden states for output head
-        if verbose:
-            print("  Computing final hidden states for output head...")
-
-        all_final_hidden = []
+        # STEP 1: First pass - collect all layer activations for target propagation
+        if use_target_propagation and verbose:
+            print("  Phase 1: Collecting activations for target propagation...")
+        
+        all_layer_activations = [[] for _ in range(self.config.num_layers + 1)]  # +1 for final
         all_targets = []
 
         for batch_idx in range(num_batches):
@@ -890,40 +850,126 @@ class PILLanguageModel(nn.Module):
             pos_emb = self.position_embedding(positions)
             x = tok_emb + pos_emb
 
-            # Forward through all blocks (now fitted)
-            for block in self.blocks:
-                x = block(x)
+            # Forward through blocks, collecting pre-FFN activations
+            for layer_idx, block in enumerate(self.blocks):
+                # Pre-FFN activation (after attention)
+                x_attn = x + block.attention(block.ln1(x))
+                x_pre_ffn = block.ln2(x_attn)
+                
+                # Store pre-FFN for this layer
+                all_layer_activations[layer_idx].append(
+                    x_pre_ffn.reshape(-1, self.config.embed_dim).cpu()
+                )
+                
+                # Continue through FFN with proper residual
+                # x = x_attn + FFN(ln2(x_attn))
+                x = x_attn + block.ffn(x_pre_ffn)
 
             # Final layer norm
             x = self.ln_f(x)
-
-            # Store (on CPU)
-            all_final_hidden.append(x.reshape(-1, self.config.embed_dim).cpu())
+            all_layer_activations[self.config.num_layers].append(
+                x.reshape(-1, self.config.embed_dim).cpu()
+            )
             all_targets.append(batch_target.reshape(-1).cpu())
 
             if device.type == "cuda":
                 torch.cuda.empty_cache()
 
-        # Concatenate and subsample for output head fitting
-        x_flat = torch.cat(all_final_hidden, dim=0)
+        # Concatenate all
+        for i in range(len(all_layer_activations)):
+            all_layer_activations[i] = torch.cat(all_layer_activations[i], dim=0)
         target_flat = torch.cat(all_targets, dim=0)
-        del all_final_hidden, all_targets
-
+        
         # Subsample if needed
-        total_tokens = x_flat.shape[0]
+        total_tokens = all_layer_activations[0].shape[0]
         if total_tokens > max_fit_tokens:
             indices = torch.randperm(total_tokens)[:max_fit_tokens]
-            x_flat = x_flat[indices]
+            for i in range(len(all_layer_activations)):
+                all_layer_activations[i] = all_layer_activations[i][indices]
             target_flat = target_flat[indices]
+            if verbose:
+                print(f"  Subsampled {total_tokens} -> {max_fit_tokens} tokens")
 
-        x_flat = x_flat.to(device)
+        # Move final activations to device for output head fitting
+        x_final = all_layer_activations[self.config.num_layers].to(device)
         target_flat = target_flat.to(device)
 
-        head_stats = self.output_head.fit(x_flat, target_flat)
+        # STEP 2: Fit output head first
+        if verbose:
+            print("  Phase 2: Fitting output head...")
+        
+        head_stats = self.output_head.fit(x_final, target_flat)
         stats["head_accuracy"] = head_stats.get("accuracy", 0)
-
         if verbose:
             print(f"  Output head accuracy: {stats['head_accuracy']:.4f}")
+
+        # STEP 3: Target Propagation - compute ideal layer outputs
+        if use_target_propagation:
+            if verbose:
+                print("  Phase 3: Target propagation for FFN layers...")
+            
+            # Get target embeddings (what output head expects)
+            target_embeddings = self.token_embedding(target_flat)  # (N, embed_dim)
+            
+            # Backward pass: compute layer targets
+            # For the last layer, target = what would produce correct embedding
+            # For earlier layers, propagate backward
+            
+            layer_targets = [None] * self.config.num_layers
+            
+            # Last layer's target: the embedding of the target token
+            # This is what the final hidden state should look like
+            layer_targets[-1] = target_embeddings
+            
+            # Propagate targets backward (simplified - each layer aims for same target)
+            # In more sophisticated version, could use inverse of layer functions
+            for i in range(self.config.num_layers - 2, -1, -1):
+                layer_targets[i] = layer_targets[i + 1]  # Same target for now
+            
+            # STEP 4: Fit each FFN with its target
+            for layer_idx, block in enumerate(self.blocks):
+                x_input = all_layer_activations[layer_idx].to(device)
+                layer_target = layer_targets[layer_idx].to(device)
+                
+                # FFN learns to produce features that move toward target
+                # Since forward is: out = FFN(x) + x (residual)
+                # FFN should learn: FFN(x) = target - x
+                ffn_target = layer_target - x_input
+                
+                # Fit FFN
+                ffn_stats = block.ffn.fit(x_input, target=ffn_target, mode="reconstruction")
+                stats["ffn_mse"].append(ffn_stats.get("mse", 0))
+
+                if verbose:
+                    print(
+                        f"  Block {layer_idx + 1}/{self.config.num_layers}: FFN MSE = {ffn_stats.get('mse', 0):.6f}"
+                    )
+
+                del x_input, layer_target, ffn_target
+                if device.type == "cuda":
+                    torch.cuda.empty_cache()
+        else:
+            # Original approach: identity/residual fitting
+            for layer_idx, block in enumerate(self.blocks):
+                x_input = all_layer_activations[layer_idx].to(device)
+                
+                # Fit FFN to residual mode (output near zero)
+                ffn_stats = block.ffn.fit(x_input, mode="residual")
+                stats["ffn_mse"].append(ffn_stats.get("mse", 0))
+
+                if verbose:
+                    print(
+                        f"  Block {layer_idx + 1}/{self.config.num_layers}: FFN MSE = {ffn_stats.get('mse', 0):.6f}"
+                    )
+
+                del x_input
+                if device.type == "cuda":
+                    torch.cuda.empty_cache()
+
+        # Cleanup
+        del all_layer_activations
+        if device.type == "cuda":
+            torch.cuda.empty_cache()
 
         self._pil_fitted = True
 
