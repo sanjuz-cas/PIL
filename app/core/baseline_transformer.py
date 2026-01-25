@@ -271,7 +271,7 @@ class BaselineTransformer(nn.Module):
         finished = torch.zeros(batch_size, dtype=torch.bool, device=input_ids.device)
 
         for _ in range(max_new_tokens):
-            idx_cond = input_ids[:, -self.config.max_seq_len:]
+            idx_cond = input_ids[:, -self.config.max_seq_len :]
 
             result = self(idx_cond)
             logits = result["logits"][:, -1, :] / temperature
@@ -296,7 +296,9 @@ class BaselineTransformer(nn.Module):
                         F.softmax(sorted_logits, dim=-1), dim=-1
                     )
                     sorted_indices_to_remove = cumulative_probs > top_p
-                    sorted_indices_to_remove[:, 1:] = sorted_indices_to_remove[:, :-1].clone()
+                    sorted_indices_to_remove[:, 1:] = sorted_indices_to_remove[
+                        :, :-1
+                    ].clone()
                     sorted_indices_to_remove[:, 0] = 0
                     indices_to_remove = sorted_indices_to_remove.scatter(
                         1, sorted_indices, sorted_indices_to_remove
