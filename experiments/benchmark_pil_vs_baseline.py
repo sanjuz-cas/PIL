@@ -412,7 +412,12 @@ def train_pil(
                 pbar.set_postfix(loss=f"{loss.item():.4f}")
 
             metrics = compute_metrics(
-                model, eval_input, eval_target, config.batch_size, device, is_baseline=False
+                model,
+                eval_input,
+                eval_target,
+                config.batch_size,
+                device,
+                is_baseline=False,
             )
             print(
                 f"  Epoch {epoch + 1}: Loss={metrics['loss']:.4f}, PPL={metrics['perplexity']:.2f}, Acc={metrics['top1_accuracy']:.4f}"
@@ -769,7 +774,12 @@ def main():
     pil_model_interleaved = PILLanguageModel(pil_config_interleaved)
 
     pil_interleaved_result = train_pil_interleaved(
-        pil_model_interleaved, train_input, train_target, eval_input, eval_target, config
+        pil_model_interleaved,
+        train_input,
+        train_target,
+        eval_input,
+        eval_target,
+        config,
     )
     results.append(pil_interleaved_result)
 
@@ -796,7 +806,9 @@ def main():
     print("\n\nSpeedup Analysis:")
     print(f"  PIL Pure vs Baseline: {baseline_time / pil_pure_time:.1f}x faster")
     print(f"  PIL Attn vs Baseline: {baseline_time / pil_attn_time:.1f}x faster")
-    print(f"  PIL Interleaved vs Baseline: {baseline_time / pil_interleaved_time:.1f}x faster")
+    print(
+        f"  PIL Interleaved vs Baseline: {baseline_time / pil_interleaved_time:.1f}x faster"
+    )
 
     # Save results
     os.makedirs(config.output_dir, exist_ok=True)

@@ -222,10 +222,10 @@ class BiPILFFN(nn.Module):
 
     @torch.no_grad()
     def fit(
-        self, 
-        x: torch.Tensor, 
+        self,
+        x: torch.Tensor,
         target: Optional[torch.Tensor] = None,
-        mode: Literal["identity", "residual", "reconstruction"] = "residual"
+        mode: Literal["identity", "residual", "reconstruction"] = "residual",
     ) -> Dict:
         """
         Solve for W_out using pseudoinverse.
@@ -233,7 +233,7 @@ class BiPILFFN(nn.Module):
         Args:
             x: Input tensor (N, embed_dim) - flattened
             target: Target tensor. If None, behavior depends on mode
-            mode: 
+            mode:
                 - "identity": Learn to map x -> x (default)
                 - "residual": Learn to map x -> 0 (output + residual = x)
                 - "reconstruction": Learn x -> target
@@ -833,8 +833,10 @@ class PILLanguageModel(nn.Module):
         # STEP 1: First pass - collect all layer activations for target propagation
         if use_target_propagation and verbose:
             print("  Phase 1: Collecting activations for target propagation...")
-        
-        all_layer_activations = [[] for _ in range(self.config.num_layers + 1)]  # +1 for final
+
+        all_layer_activations = [
+            [] for _ in range(self.config.num_layers + 1)
+        ]  # +1 for final
         all_targets = []
 
         for batch_idx in range(num_batches):
@@ -855,12 +857,12 @@ class PILLanguageModel(nn.Module):
                 # Pre-FFN activation (after attention)
                 x_attn = x + block.attention(block.ln1(x))
                 x_pre_ffn = block.ln2(x_attn)
-                
+
                 # Store pre-FFN for this layer
                 all_layer_activations[layer_idx].append(
                     x_pre_ffn.reshape(-1, self.config.embed_dim).cpu()
                 )
-                
+
                 # Continue through FFN with proper residual
                 # x = x_attn + FFN(ln2(x_attn))
                 x = x_attn + block.ffn(x_pre_ffn)
@@ -879,7 +881,7 @@ class PILLanguageModel(nn.Module):
         for i in range(len(all_layer_activations)):
             all_layer_activations[i] = torch.cat(all_layer_activations[i], dim=0)
         target_flat = torch.cat(all_targets, dim=0)
-        
+
         # Subsample if needed
         total_tokens = all_layer_activations[0].shape[0]
         if total_tokens > max_fit_tokens:
@@ -897,7 +899,7 @@ class PILLanguageModel(nn.Module):
         # STEP 2: Fit output head first
         if verbose:
             print("  Phase 2: Fitting output head...")
-        
+
         head_stats = self.output_head.fit(x_final, target_flat)
         stats["head_accuracy"] = head_stats.get("accuracy", 0)
         if verbose:
@@ -907,37 +909,39 @@ class PILLanguageModel(nn.Module):
         if use_target_propagation:
             if verbose:
                 print("  Phase 3: Target propagation for FFN layers...")
-            
+
             # Get target embeddings (what output head expects)
             target_embeddings = self.token_embedding(target_flat)  # (N, embed_dim)
-            
+
             # Backward pass: compute layer targets
             # For the last layer, target = what would produce correct embedding
             # For earlier layers, propagate backward
-            
+
             layer_targets = [None] * self.config.num_layers
-            
+
             # Last layer's target: the embedding of the target token
             # This is what the final hidden state should look like
             layer_targets[-1] = target_embeddings
-            
+
             # Propagate targets backward (simplified - each layer aims for same target)
             # In more sophisticated version, could use inverse of layer functions
             for i in range(self.config.num_layers - 2, -1, -1):
                 layer_targets[i] = layer_targets[i + 1]  # Same target for now
-            
+
             # STEP 4: Fit each FFN with its target
             for layer_idx, block in enumerate(self.blocks):
                 x_input = all_layer_activations[layer_idx].to(device)
                 layer_target = layer_targets[layer_idx].to(device)
-                
+
                 # FFN learns to produce features that move toward target
                 # Since forward is: out = FFN(x) + x (residual)
                 # FFN should learn: FFN(x) = target - x
                 ffn_target = layer_target - x_input
-                
+
                 # Fit FFN
-                ffn_stats = block.ffn.fit(x_input, target=ffn_target, mode="reconstruction")
+                ffn_stats = block.ffn.fit(
+                    x_input, target=ffn_target, mode="reconstruction"
+                )
                 stats["ffn_mse"].append(ffn_stats.get("mse", 0))
 
                 if verbose:
@@ -952,7 +956,7 @@ class PILLanguageModel(nn.Module):
             # Original approach: identity/residual fitting
             for layer_idx, block in enumerate(self.blocks):
                 x_input = all_layer_activations[layer_idx].to(device)
-                
+
                 # Fit FFN to residual mode (output near zero)
                 ffn_stats = block.ffn.fit(x_input, mode="residual")
                 stats["ffn_mse"].append(ffn_stats.get("mse", 0))
