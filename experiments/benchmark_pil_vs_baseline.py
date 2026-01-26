@@ -311,38 +311,46 @@ def train_pil(
     eval_target: torch.Tensor,
     config: BenchmarkConfig,
 ) -> BenchmarkResult:
-    """Train PIL model with one-shot FFN + gradient attention."""
+    """Train PIL model: Full attention training, then one-shot PIL at the end."""
     device = config.device
     model = model.to(device)
 
     total_tokens = len(train_input) * train_input.shape[1]
 
     print("\n" + "=" * 60)
-    print("Training PIL-LM (Attention First + PIL FFN)")
+    print("Training PIL-LM (Attention Full → PIL Last)")
     print("=" * 60)
 
     start_time = time.perf_counter()
 
-    # Phase 1: Attention Pre-training (so FFN sees meaningful features)
-    print("\nPhase 1: Attention Pre-training (2 epochs)")
+    # Phase 1: Full Attention Training (all epochs)
+    # PIL FFN outputs ~0 initially (residual mode), so attention does all work
+    print(f"\nPhase 1: Full Attention Training ({config.num_epochs} epochs)")
 
-    # Train attention + embeddings first
+    # Initialize FFN to residual mode (near-zero output)
+    with torch.no_grad():
+        for block in model.blocks:
+            block.ffn.W_out.zero_()
+            block.ffn.bias.zero_()
+
+    # Train attention + embeddings
     attn_params = []
     for block in model.blocks:
         attn_params.extend(block.attention.parameters())
         attn_params.extend(block.ln1.parameters())
+        attn_params.extend(block.ln2.parameters())
     attn_params.extend(model.token_embedding.parameters())
     attn_params.extend(model.position_embedding.parameters())
+    attn_params.extend(model.ln_f.parameters())
 
     optimizer = torch.optim.AdamW(attn_params, lr=config.learning_rate)
 
     dataset = TensorDataset(train_input, train_target)
     dataloader = DataLoader(dataset, batch_size=config.batch_size, shuffle=True)
 
-    # Pre-train attention for 2 epochs
-    for epoch in range(2):
+    for epoch in range(config.num_epochs):
         model.train()
-        pbar = tqdm(dataloader, desc=f"Attn Pre-train {epoch + 1}/2")
+        pbar = tqdm(dataloader, desc=f"Attn Train {epoch + 1}/{config.num_epochs}")
         for batch_input, batch_target in pbar:
             batch_input = batch_input.to(device)
             batch_target = batch_target.to(device)
@@ -359,71 +367,30 @@ def train_pil(
             optimizer.step()
             pbar.set_postfix(loss=f"{loss.item():.4f}")
 
-    attn_time = time.perf_counter() - start_time
-    print(f"  Attention pre-training completed in {attn_time:.2f}s")
+        # Eval
+        metrics = compute_metrics(
+            model, eval_input, eval_target, config.batch_size, device, is_baseline=False
+        )
+        print(
+            f"  Epoch {epoch + 1}: Loss={metrics['loss']:.4f}, PPL={metrics['perplexity']:.2f}, Acc={metrics['top1_accuracy']:.4f}"
+        )
 
-    # Phase 2: PIL Training (One-Shot) - now with trained attention
-    print("\nPhase 2: PIL One-Shot FFN Training")
+    attn_time = time.perf_counter() - start_time
+    print(f"  Attention training completed in {attn_time:.2f}s")
+
+    # Phase 2: PIL Training (One-Shot) - AFTER attention is fully trained
+    # Now activations are stable, PIL can learn meaningful transforms
+    print("\nPhase 2: PIL One-Shot FFN Training (on frozen attention)")
     pil_input = train_input.to(device)
     pil_target = train_target.to(device)
 
-    pil_stats = model.fit_pil_layers(pil_input, pil_target, verbose=True)
-
-    pil_time = time.perf_counter() - start_time
-    print(f"  PIL phase completed in {pil_time - attn_time:.2f}s")
-
-    # Phase 3: Final Attention Fine-tuning (remaining epochs)
-    remaining_epochs = max(0, config.num_epochs - 2)
-    if remaining_epochs > 0:
-        print(f"\nPhase 3: Attention Fine-tuning ({remaining_epochs} more epochs)")
-
-        # Only train attention parameters
-        attn_params = []
-        for block in model.blocks:
-            attn_params.extend(block.attention.parameters())
-            attn_params.extend(block.ln1.parameters())
-
-        optimizer = torch.optim.AdamW(attn_params, lr=config.learning_rate * 0.5)
-
-        dataset = TensorDataset(train_input, train_target)
-        dataloader = DataLoader(dataset, batch_size=config.batch_size, shuffle=True)
-
-        for epoch in range(remaining_epochs):
-            model.train()
-
-            pbar = tqdm(dataloader, desc=f"Fine-tune {epoch + 1}/{remaining_epochs}")
-            for batch_input, batch_target in pbar:
-                batch_input = batch_input.to(device)
-                batch_target = batch_target.to(device)
-
-                optimizer.zero_grad()
-
-                logits = model(batch_input)
-                loss = F.cross_entropy(
-                    logits.view(-1, logits.size(-1)),
-                    batch_target.view(-1),
-                    ignore_index=50256,
-                )
-                loss.backward()
-
-                torch.nn.utils.clip_grad_norm_(attn_params, 1.0)
-                optimizer.step()
-
-                pbar.set_postfix(loss=f"{loss.item():.4f}")
-
-            metrics = compute_metrics(
-                model,
-                eval_input,
-                eval_target,
-                config.batch_size,
-                device,
-                is_baseline=False,
-            )
-            print(
-                f"  Epoch {epoch + 1}: Loss={metrics['loss']:.4f}, PPL={metrics['perplexity']:.2f}, Acc={metrics['top1_accuracy']:.4f}"
-            )
+    # Use simpler residual fitting (more stable than target propagation)
+    pil_stats = model.fit_pil_layers(
+        pil_input, pil_target, verbose=True, use_target_propagation=False
+    )
 
     train_time = time.perf_counter() - start_time
+    print(f"  PIL phase completed in {train_time - attn_time:.2f}s")
 
     # Final eval
     final_metrics = compute_metrics(
@@ -431,7 +398,7 @@ def train_pil(
     )
 
     return BenchmarkResult(
-        model_name="PIL-LM (Attn+PIL)",
+        model_name="PIL-LM (Attn→PIL)",
         num_params=model.get_num_params(),
         train_time_seconds=train_time,
         tokens_per_second=(total_tokens * config.num_epochs) / train_time,
@@ -521,25 +488,26 @@ def train_pil_interleaved(
     for block in model.blocks:
         attn_params.extend(block.attention.parameters())
         attn_params.extend(block.ln1.parameters())
+        attn_params.extend(block.ln2.parameters())
     attn_params.extend(model.token_embedding.parameters())
     attn_params.extend(model.position_embedding.parameters())
+    attn_params.extend(model.ln_f.parameters())
 
     optimizer = torch.optim.AdamW(attn_params, lr=config.learning_rate)
 
     dataset = TensorDataset(train_input, train_target)
     dataloader = DataLoader(dataset, batch_size=config.batch_size, shuffle=True)
 
-    pil_input = train_input.to(device)
-    pil_target = train_target.to(device)
+    # Initialize FFN to zero (attention only)
+    with torch.no_grad():
+        for block in model.blocks:
+            block.ffn.W_out.zero_()
+            block.ffn.bias.zero_()
 
+    # Train attention fully
     for epoch in range(config.num_epochs):
-        # Step 1: Fit PIL on current attention features
-        print(f"\n  Epoch {epoch + 1}: Fitting PIL...")
-        model.fit_pil_layers(pil_input, pil_target, verbose=False)
-
-        # Step 2: Train attention for one epoch
         model.train()
-        pbar = tqdm(dataloader, desc=f"Epoch {epoch + 1}/{config.num_epochs}")
+        pbar = tqdm(dataloader, desc=f"Attn {epoch + 1}/{config.num_epochs}")
         for batch_input, batch_target in pbar:
             batch_input = batch_input.to(device)
             batch_target = batch_target.to(device)
@@ -564,9 +532,13 @@ def train_pil_interleaved(
             f"  Epoch {epoch + 1}: Loss={metrics['loss']:.4f}, PPL={metrics['perplexity']:.2f}, Acc={metrics['top1_accuracy']:.4f}"
         )
 
-    # Final PIL refit
-    print("\n  Final PIL refit...")
-    model.fit_pil_layers(pil_input, pil_target, verbose=False)
+    # Final PIL fit with TARGET PROPAGATION (now attention is stable)
+    print("\n  Final PIL fit with Target Propagation...")
+    pil_input = train_input.to(device)
+    pil_target = train_target.to(device)
+    model.fit_pil_layers(
+        pil_input, pil_target, verbose=True, use_target_propagation=True
+    )
 
     train_time = time.perf_counter() - start_time
 
@@ -576,7 +548,7 @@ def train_pil_interleaved(
     )
 
     return BenchmarkResult(
-        model_name="PIL-LM (Interleaved)",
+        model_name="PIL-LM (Attn→TargetProp)",
         num_params=model.get_num_params(),
         train_time_seconds=train_time,
         tokens_per_second=(total_tokens * config.num_epochs) / train_time,
@@ -805,9 +777,9 @@ def main():
 
     print("\n\nSpeedup Analysis:")
     print(f"  PIL Pure vs Baseline: {baseline_time / pil_pure_time:.1f}x faster")
-    print(f"  PIL Attn vs Baseline: {baseline_time / pil_attn_time:.1f}x faster")
+    print(f"  PIL Attn→PIL vs Baseline: {baseline_time / pil_attn_time:.1f}x faster")
     print(
-        f"  PIL Interleaved vs Baseline: {baseline_time / pil_interleaved_time:.1f}x faster"
+        f"  PIL Attn→TargetProp vs Baseline: {baseline_time / pil_interleaved_time:.1f}x faster"
     )
 
     # Save results
