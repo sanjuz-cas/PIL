@@ -905,7 +905,7 @@ class PILLanguageModel(nn.Module):
         if verbose:
             print(f"  Output head accuracy: {stats['head_accuracy']:.4f}")
 
-        # STEP 3: Target Propagation - compute ideal layer outputs
+        # STEP 3: Fit FFN layers
         if use_target_propagation:
             if verbose:
                 print("  Phase 3: Target propagation for FFN layers...")
@@ -913,29 +913,19 @@ class PILLanguageModel(nn.Module):
             # Get target embeddings (what output head expects)
             target_embeddings = self.token_embedding(target_flat)  # (N, embed_dim)
 
-            # Backward pass: compute layer targets
-            # For the last layer, target = what would produce correct embedding
-            # For earlier layers, propagate backward
-
-            layer_targets = [None] * self.config.num_layers
-
-            # Last layer's target: the embedding of the target token
-            # This is what the final hidden state should look like
-            layer_targets[-1] = target_embeddings
-
-            # Propagate targets backward (simplified - each layer aims for same target)
-            # In more sophisticated version, could use inverse of layer functions
-            for i in range(self.config.num_layers - 2, -1, -1):
-                layer_targets[i] = layer_targets[i + 1]  # Same target for now
-
-            # STEP 4: Fit each FFN with its target
+            # Compute scaling factor to avoid collapsing all states to same target
+            # Each layer's target is a blend of current state and target embedding
             for layer_idx, block in enumerate(self.blocks):
                 x_input = all_layer_activations[layer_idx].to(device)
-                layer_target = layer_targets[layer_idx].to(device)
-
-                # FFN learns to produce features that move toward target
-                # Since forward is: out = FFN(x) + x (residual)
-                # FFN should learn: FFN(x) = target - x
+                
+                # Progressive blending: later layers aim closer to target
+                # Layer 0: 20% target, Layer N-1: 80% target
+                blend_factor = 0.2 + 0.6 * (layer_idx / max(1, self.config.num_layers - 1))
+                
+                # Blended target: mix of current features and target embedding
+                layer_target = (1 - blend_factor) * x_input + blend_factor * target_embeddings.to(device)
+                
+                # FFN learns: FFN(x) = layer_target - x (so x + FFN(x) = layer_target)
                 ffn_target = layer_target - x_input
 
                 # Fit FFN
@@ -946,14 +936,14 @@ class PILLanguageModel(nn.Module):
 
                 if verbose:
                     print(
-                        f"  Block {layer_idx + 1}/{self.config.num_layers}: FFN MSE = {ffn_stats.get('mse', 0):.6f}"
+                        f"  Block {layer_idx + 1}/{self.config.num_layers}: FFN MSE = {ffn_stats.get('mse', 0):.6f} (blend={blend_factor:.2f})"
                     )
 
                 del x_input, layer_target, ffn_target
                 if device.type == "cuda":
                     torch.cuda.empty_cache()
         else:
-            # Original approach: identity/residual fitting
+            # Residual mode: FFN outputs near zero
             for layer_idx, block in enumerate(self.blocks):
                 x_input = all_layer_activations[layer_idx].to(device)
 
